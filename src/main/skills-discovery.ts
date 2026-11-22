@@ -1,6 +1,6 @@
-import { readFile } from 'fs/promises'
+import { readFile, readdir, realpath, stat } from 'fs/promises'
 import { extname, join } from 'path'
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync, type Dirent } from 'fs'
 import { RPC_SKILL_PATH_PREFIX, isRpcSkillPath, type InstalledSkill } from '../shared/ipc-contracts'
 import { skillDisplayName } from '../shared/pi-command'
 
@@ -66,9 +66,19 @@ export async function listSkills(
   engine: 'pi' | 'omp',
   homeDir: string = process.env.HOME ?? process.env.USERPROFILE ?? ''
 ): Promise<InstalledSkill[]> {
-  return listSkillsSync(cwd, engine, homeDir)
+  const { dirs, recursive, rootMdFiles } = skillScanPlan(cwd, homeDir, engine)
+
+  const skills: InstalledSkill[] = []
+  for (const { dir, source } of dirs) {
+    await collectSkills(dir, skills, source, { recursive, rootMdFiles, visited: new Set() })
+  }
+  return dedupeByName(skills)
 }
 
+/**
+ * Same scan as `listSkills`, blocking. For building the agent's start args,
+ * which are assembled synchronously; the Skills panel uses the async one.
+ */
 export function listSkillsSync(
   cwd: string,
   engine: 'pi' | 'omp',
@@ -78,11 +88,14 @@ export function listSkillsSync(
 
   const skills: InstalledSkill[] = []
   for (const { dir, source } of dirs) {
-    collectSkills(dir, skills, source, { recursive, rootMdFiles })
+    collectSkillsSync(dir, skills, source, { recursive, rootMdFiles, visited: new Set() })
   }
+  return dedupeByName(skills)
+}
 
-  // Both engines resolve name collisions across roots first-wins, in the same
-  // precedence order the scan above uses.
+// Both engines resolve name collisions across roots first-wins, in the same
+// precedence order the scan uses.
+function dedupeByName(skills: InstalledSkill[]): InstalledSkill[] {
   const seen = new Set<string>()
   return skills.filter((skill) => {
     if (seen.has(skill.name)) return false
@@ -109,9 +122,99 @@ export async function readListedSkillFile(skills: readonly InstalledSkill[], fil
 interface CollectOptions {
   recursive: boolean
   rootMdFiles: boolean
+  /** Real paths already scanned, so a symlink loop ends instead of recursing. */
+  visited: Set<string>
 }
 
-function collectSkills(
+type EntryAction = 'skip' | 'root-md' | 'descend' | 'check-skill-dir'
+
+/**
+ * What a directory entry means to the scan. Shared by the async and sync
+ * collectors so the two cannot drift. Pi skips dotfiles and `node_modules`;
+ * OMP's one-level scan keeps its original behavior.
+ */
+function entryAction(
+  name: string,
+  isFile: boolean,
+  isDirectory: boolean,
+  options: CollectOptions,
+  isRoot: boolean
+): EntryAction {
+  if (options.recursive && (name.startsWith('.') || (isDirectory && name === 'node_modules'))) return 'skip'
+  if (isFile && name.endsWith('.md') && name !== 'SKILL.md') {
+    // Bare .md skills count only directly under the skills root
+    return options.rootMdFiles && isRoot ? 'root-md' : 'skip'
+  }
+  if (isDirectory) return options.recursive ? 'descend' : 'check-skill-dir'
+  return 'skip'
+}
+
+// Pi treats a directory holding SKILL.md as a skill root and never looks
+// inside it, so `references/*.md` and the like are not skills.
+const isSkillRoot = (names: readonly string[], options: CollectOptions): boolean =>
+  options.recursive && names.includes('SKILL.md')
+
+// Only Pi follows symlinks; OMP's entries keep the plain Dirent kind.
+const followsSymlinks = (item: Dirent, options: CollectOptions): boolean =>
+  options.recursive && item.isSymbolicLink()
+
+async function collectSkills(
+  dir: string,
+  skills: InstalledSkill[],
+  source: 'global' | 'project',
+  options: CollectOptions,
+  isRoot = true
+): Promise<void> {
+  try {
+    if (!existsSync(dir)) return
+
+    const real = await realpath(dir)
+    if (options.visited.has(real)) return
+    options.visited.add(real)
+
+    const items = await readdir(dir, { withFileTypes: true })
+
+    if (isSkillRoot(items.map((item) => item.name), options)) {
+      await pushSkillFile(join(dir, 'SKILL.md'), skills, source)
+      return
+    }
+
+    for (const item of items) {
+      const fullPath = join(dir, item.name)
+      let isFile = item.isFile()
+      let isDirectory = item.isDirectory()
+      if (followsSymlinks(item, options)) {
+        try {
+          const stats = await stat(fullPath)
+          isFile = stats.isFile()
+          isDirectory = stats.isDirectory()
+        } catch {
+          continue
+        }
+      }
+
+      switch (entryAction(item.name, isFile, isDirectory, options, isRoot)) {
+        case 'root-md':
+          await pushSkillFile(fullPath, skills, source)
+          break
+        case 'descend':
+          await collectSkills(fullPath, skills, source, options, false)
+          break
+        case 'check-skill-dir': {
+          const skillFile = join(fullPath, 'SKILL.md')
+          if (existsSync(skillFile)) await pushSkillFile(skillFile, skills, source)
+          break
+        }
+        case 'skip':
+          break
+      }
+    }
+  } catch {
+    // Directory doesn't exist or isn't readable
+  }
+}
+
+function collectSkillsSync(
   dir: string,
   skills: InstalledSkill[],
   source: 'global' | 'project',
@@ -121,12 +224,14 @@ function collectSkills(
   try {
     if (!existsSync(dir)) return
 
+    const real = realpathSync(dir)
+    if (options.visited.has(real)) return
+    options.visited.add(real)
+
     const items = readdirSync(dir, { withFileTypes: true })
 
-    // Pi treats a directory holding SKILL.md as a skill root and never looks
-    // inside it, so `references/*.md` and the like are not skills.
-    if (options.recursive && items.some((item) => item.name === 'SKILL.md')) {
-      pushSkillFile(join(dir, 'SKILL.md'), skills, source)
+    if (isSkillRoot(items.map((item) => item.name), options)) {
+      pushSkillFileSync(join(dir, 'SKILL.md'), skills, source)
       return
     }
 
@@ -134,7 +239,7 @@ function collectSkills(
       const fullPath = join(dir, item.name)
       let isFile = item.isFile()
       let isDirectory = item.isDirectory()
-      if (item.isSymbolicLink()) {
+      if (followsSymlinks(item, options)) {
         try {
           const stats = statSync(fullPath)
           isFile = stats.isFile()
@@ -144,21 +249,20 @@ function collectSkills(
         }
       }
 
-      if (isFile && item.name.endsWith('.md') && item.name !== 'SKILL.md') {
-        // Bare .md skills count only directly under the skills root
-        if (!options.rootMdFiles || !isRoot) continue
-        pushSkillFile(fullPath, skills, source)
-      } else if (isDirectory) {
-        if (options.recursive) {
-          if (item.name.startsWith('.') || item.name === 'node_modules') continue
-          collectSkills(fullPath, skills, source, options, false)
-          continue
+      switch (entryAction(item.name, isFile, isDirectory, options, isRoot)) {
+        case 'root-md':
+          pushSkillFileSync(fullPath, skills, source)
+          break
+        case 'descend':
+          collectSkillsSync(fullPath, skills, source, options, false)
+          break
+        case 'check-skill-dir': {
+          const skillFile = join(fullPath, 'SKILL.md')
+          if (existsSync(skillFile)) pushSkillFileSync(skillFile, skills, source)
+          break
         }
-        // Directory with SKILL.md
-        const skillFile = join(fullPath, 'SKILL.md')
-        if (existsSync(skillFile)) {
-          pushSkillFile(skillFile, skills, source)
-        }
+        case 'skip':
+          break
       }
     }
   } catch {
@@ -166,23 +270,37 @@ function collectSkills(
   }
 }
 
-function pushSkillFile(
+function skillFromContent(
+  filePath: string,
+  content: string,
+  source: 'global' | 'project'
+): InstalledSkill | null {
+  const parsed = parseSkillFrontmatter(content)
+  if (!parsed) return null
+  return { name: parsed.name, description: parsed.description, path: filePath, source, enabled: true }
+}
+
+async function pushSkillFile(
+  filePath: string,
+  skills: InstalledSkill[],
+  source: 'global' | 'project'
+): Promise<void> {
+  try {
+    const skill = skillFromContent(filePath, await readFile(filePath, 'utf-8'), source)
+    if (skill) skills.push(skill)
+  } catch {
+    // Skip unreadable files
+  }
+}
+
+function pushSkillFileSync(
   filePath: string,
   skills: InstalledSkill[],
   source: 'global' | 'project'
 ): void {
   try {
-    const content = readFileSync(filePath, 'utf-8')
-    const parsed = parseSkillFrontmatter(content)
-    if (parsed) {
-      skills.push({
-        name: parsed.name,
-        description: parsed.description,
-        path: filePath,
-        source,
-        enabled: true,
-      })
-    }
+    const skill = skillFromContent(filePath, readFileSync(filePath, 'utf-8'), source)
+    if (skill) skills.push(skill)
   } catch {
     // Skip unreadable files
   }

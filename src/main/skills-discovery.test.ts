@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, mkdir, writeFile, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { RPC_SKILL_PATH_PREFIX, type InstalledSkill } from '../shared/ipc-contracts'
-import { listSkills, mergeRpcSkills, parseSkillFrontmatter, readListedSkillFile } from './skills-discovery'
+import { listSkills, listSkillsSync, mergeRpcSkills, parseSkillFrontmatter, readListedSkillFile } from './skills-discovery'
 
 const skillMd = (name: string): string => `---\nname: ${name}\ndescription: ${name} does things\n---\n\nBody.\n`
 
@@ -199,4 +199,55 @@ test('parseSkillFrontmatter accepts CRLF endings and a UTF-8 BOM', () => {
     name: 'bom',
     description: 'bom file',
   })
+})
+
+async function withBothScans(
+  setup: (root: string) => Promise<void>,
+  engine: 'pi' | 'omp',
+  check: (skills: InstalledSkill[]) => void
+): Promise<void> {
+  const base = await mkdtemp(join(tmpdir(), 'skills-discovery-'))
+  try {
+    const root = join(base, 'home', '.agents', 'skills')
+    await mkdir(root, { recursive: true })
+    await setup(root)
+    check(await listSkills(join(base, 'proj'), engine, join(base, 'home')))
+    check(listSkillsSync(join(base, 'proj'), engine, join(base, 'home')))
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+}
+
+test('Pi follows symlinked skill directories and OMP does not', async () => {
+  const setup = async (root: string): Promise<void> => {
+    const outside = join(root, '..', 'elsewhere')
+    await writeSkill(outside, 'linked')
+    await symlink(join(outside, 'linked'), join(root, 'linked'), 'dir')
+  }
+  await withBothScans(setup, 'pi', (skills) => assert.deepEqual(names(skills), ['linked']))
+  await withBothScans(setup, 'omp', (skills) => assert.deepEqual(names(skills), []))
+})
+
+test('a symlink loop ends the Pi scan', async () => {
+  await withBothScans(
+    async (root) => {
+      await writeSkill(root, 'real')
+      await mkdir(join(root, 'group'), { recursive: true })
+      await writeSkill(join(root, 'group'), 'inner')
+      await symlink(root, join(root, 'group', 'loop'), 'dir')
+    },
+    'pi',
+    (skills) => assert.deepEqual(names(skills), ['inner', 'real'])
+  )
+})
+
+test('Pi ignores dotfiles at the skills root', async () => {
+  await withBothScans(
+    async (root) => {
+      await writeFile(join(root, '.hidden.md'), skillMd('hidden'), 'utf-8')
+      await writeFile(join(root, 'visible.md'), skillMd('visible'), 'utf-8')
+    },
+    'pi',
+    (skills) => assert.deepEqual(names(skills), ['visible'])
+  )
 })

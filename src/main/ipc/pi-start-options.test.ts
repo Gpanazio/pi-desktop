@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { before, test } from 'node:test'
 import { createRequire } from 'node:module'
-import { basename } from 'node:path'
+import { basename, join } from 'node:path'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { DEFAULT_SETTINGS } from '../../shared/default-settings'
 import type { AgentEngineKind, AppSettings, InstalledSkill } from '../../shared/ipc-contracts'
 import { NEXT_STEPS_EXTENSION_FILE, NEXT_STEPS_TOOL_NAME } from '../../../resources/next-steps'
@@ -123,4 +125,35 @@ test('no active skill group, or an unknown one, leaves the skill args alone', ()
   const group = { id: 'g', name: 'PI', skills: ['alpha'], collapsed: false }
   assert.deepEqual(startOptions.skillGroupArgs({ skillGroups: [group], activeSkillGroupId: null }, []).args, [])
   assert.deepEqual(startOptions.skillGroupArgs({ skillGroups: [group], activeSkillGroupId: 'missing' }, []).args, [])
+})
+
+test('an active skill group adds --no-skills and --skill for Pi only, and logs unresolved names', async () => {
+  const { applyPermissionModeToStartOptions } = startOptions
+  const { appLog } = await import('../app-log')
+  const cwd = await mkdtemp(join(tmpdir(), 'start-options-skills-'))
+  const infos: string[] = []
+  const originalInfo = appLog.info.bind(appLog)
+  appLog.info = (scope: string, message: string): void => { infos.push(`${scope}: ${message}`) }
+  try {
+    const dir = join(cwd, '.pi', 'skills', 'zz-group-skill')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'SKILL.md'), '---\nname: zz-group-skill\ndescription: d\n---\n', 'utf-8')
+    const settings: AppSettings = {
+      ...DEFAULT_SETTINGS,
+      skillGroups: [{ id: 'g', name: 'G', skills: ['zz-group-skill', 'zz-ghost'], collapsed: false }],
+      activeSkillGroupId: 'g',
+    }
+
+    const pi = applyPermissionModeToStartOptions({ cwd, engine: 'pi' }, settings)
+    assert.ok(pi.args?.includes('--no-skills'))
+    assert.equal(pi.args?.[pi.args.indexOf('--skill') + 1], dir)
+    assert.ok(infos.some((line) => line.includes('zz-ghost')))
+
+    const omp = applyPermissionModeToStartOptions({ cwd, engine: 'omp' }, settings)
+    assert.ok(!omp.args?.includes('--no-skills'))
+    assert.ok(!omp.args?.includes('--skill'))
+  } finally {
+    appLog.info = originalInfo
+    await rm(cwd, { recursive: true, force: true })
+  }
 })

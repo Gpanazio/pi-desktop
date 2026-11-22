@@ -1219,7 +1219,7 @@
     },
     "activeSkillGroup": {
       "allOption": "所有技能",
-      "description": "仅限 Pi。“所有技能”加载全部技能；选择分组后只加载该分组的技能",
+      "description": "仅限 Pi。“所有技能”加载全部技能；选择分组后只加载该分组的技能。启用分组时不会加载 Pi 软件包提供的技能。对新会话生效。",
       "label": "仅加载此分组中的技能"
     },
     "agentInstallation": {

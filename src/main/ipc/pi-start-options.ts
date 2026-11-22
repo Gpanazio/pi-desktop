@@ -155,7 +155,8 @@ export function applyPermissionModeToStartOptions(
     const group = skillGroupArgs(settings, listSkillsSync(options.cwd ?? process.env.HOME ?? '', 'pi'))
     args.push(...group.args)
     if (group.unresolved.length > 0) {
-      appLog.warn('skills', `Skill group skills not found: ${group.unresolved.join(', ')}`)
+      // Package/RPC-only skills have no folder on disk to pass, so they are left out quietly.
+      appLog.info('skills', `Skill group entries without an installed skill folder: ${group.unresolved.join(', ')}`)
     }
   }
 

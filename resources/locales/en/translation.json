@@ -1245,7 +1245,7 @@
     },
     "activeSkillGroup": {
       "allOption": "All skills",
-      "description": "Pi only. \"All skills\" loads everything; picking a skill group loads just that group's skills",
+      "description": "Pi only. \"All skills\" loads everything; picking a group loads just its skills. Skills from Pi packages are not loaded while a group is active. Applies to new sessions.",
       "label": "Load only skills from group"
     },
     "agentInstallation": {

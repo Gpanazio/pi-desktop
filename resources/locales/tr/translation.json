@@ -1245,7 +1245,7 @@
     },
     "activeSkillGroup": {
       "allOption": "Tüm beceriler",
-      "description": "Yalnızca Pi. \"Tüm beceriler\" hepsini yükler; bir grup seçmek yalnızca o grubun becerilerini yükler",
+      "description": "Yalnızca Pi. \"Tüm beceriler\" hepsini yükler; bir grup seçmek yalnızca o grubun becerilerini yükler. Grup etkinken Pi paketlerinden gelen beceriler yüklenmez. Yeni oturumlar için geçerlidir.",
       "label": "Yalnızca gruptaki becerileri yükle"
     },
     "agentInstallation": {
