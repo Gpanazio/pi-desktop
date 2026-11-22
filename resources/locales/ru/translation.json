@@ -25,6 +25,62 @@
       "downloadButton": "Скачать"
     }
   },
+  "browser": {
+    "download": {
+      "done": "",
+      "failed": ""
+    },
+    "marks": {
+      "attach": "",
+      "chip_one": "",
+      "chip_few": "",
+      "chip_many": "",
+      "chip_other": "",
+      "clear": "",
+      "editNote": "",
+      "hint": "",
+      "noteHint": "",
+      "notePlaceholder": "",
+      "noteTitle": "",
+      "remove": "",
+      "sent": "",
+      "title_one": "",
+      "title_few": "",
+      "title_many": "",
+      "title_other": "",
+      "toggle": ""
+    },
+    "shot": {
+      "dismiss": "",
+      "failed": "",
+      "fullPage": "",
+      "menu": "",
+      "visible": "",
+      "withMarks": ""
+    },
+    "toolbar": {
+      "address": "",
+      "addressPlaceholder": "",
+      "back": "",
+      "close": "",
+      "devtools": "",
+      "forward": "",
+      "loading": "",
+      "openExternal": "",
+      "reload": "",
+      "stop": ""
+    },
+    "viewport": {
+      "apply": "",
+      "custom": "",
+      "height": "",
+      "menu": "",
+      "pixelRatio": "",
+      "reset": "",
+      "scaleToFit": "",
+      "width": ""
+    }
+  },
   "chat": {
     "activity": {
       "stalled": "Модель не отвечает уже {{silent}}. Возможна задержка у провайдера.",
@@ -178,6 +234,7 @@
       "viewSource": "Исходный код"
     },
     "toolbar": {
+      "browser": "",
       "diffViewer": "Просмотр изменений",
       "fileTree": "Дерево файлов",
       "reviewPanel": "Панель проверки",

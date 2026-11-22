@@ -166,6 +166,16 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
     setAttachments((prev) => (prev.some((a) => a.path === next.path) ? prev : [...prev, next]))
   }, [])
 
+  // Take what another panel staged (a browser screenshot), once Chat is the surface on screen.
+  const stagedAttachments = useAppStore((state) => state.stagedComposerAttachments)
+  const clearStagedAttachments = useAppStore((state) => state.clearStagedComposerAttachments)
+  useEffect(() => {
+    if (stagedAttachments.length === 0) return
+    if (useAppStore.getState().currentView !== 'chat') return
+    for (const staged of stagedAttachments) addAttachment(staged)
+    clearStagedAttachments()
+  }, [stagedAttachments, addAttachment, clearStagedAttachments])
+
   // Live voice dictation writes a running transcript into the composer. The
   // textarea is uncontrolled, so track the insertion point (anchor) and the
   // length of the interim text, and rewrite that region as speech arrives.

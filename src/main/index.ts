@@ -4,7 +4,11 @@ import { basename, dirname, join, resolve as resolvePath } from 'path'
 import { isTrustedRendererUrl, RENDERER_INDEX_PATH, RENDERER_INDEX_URL } from './renderer-origin'
 import { workspaceTrustStore } from './workspace-trust'
 import { PREVIEW_PARTITIONS } from '../shared/preview-partitions'
+import { BROWSER_PARTITION } from '../shared/browser'
 import { isBlockedPreviewRequest, previewGuestPreferences } from './preview-guest'
+import { applyBrowserGuestPreferences, isBrowserGuestSrcAllowed, shouldBlockGuestNavigation, webviewGuestKind } from './browser/browser-guest'
+import { setupBrowserSession } from './browser/browser-session'
+import { startAppBrowserBridge, stopAppBrowserBridge } from './browser/browser-bridge'
 import { WorkspaceManager } from './workspace-manager'
 import type { WorkspaceTerminals } from './workspace-terminals'
 import { registerIpcHandlers, loadAppSettings, saveAppSettings } from './ipc-handlers'
@@ -277,6 +281,14 @@ function createMainWindow(): BrowserWindow {
   // Defense-in-depth against a renderer XSS trying to attach a guest with
   // elevated webPreferences.
   window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    // The browser panel's own partition has its own rules; any other partition
+    // keeps the file-preview rules below.
+    if (webviewGuestKind(params.partition) === 'browser') {
+      applyBrowserGuestPreferences(webPreferences)
+      if (!isBrowserGuestSrcAllowed(params.src)) event.preventDefault()
+      return
+    }
+
     delete webPreferences.preload
     webPreferences.nodeIntegration = false
     webPreferences.nodeIntegrationInSubFrames = false
@@ -477,6 +489,12 @@ app.whenReady().then(async () => {
   // Lock both preview partitions to local files before any preview can load.
   hardenPreviewSession()
 
+  // The built-in browser's partition: Chrome user agent, permissions, downloads, pop-ups.
+  setupBrowserSession()
+
+  // The loopback door the agent's browser tools use; sessions started below get its address.
+  await startAppBrowserBridge().catch((error) => appLog.warn('browser', 'Failed to start the browser bridge', error))
+
   // Serve downloaded speech-model files to the renderer. The handler streams
   // files only from the single speech-models directory and rejects traversal.
   protocol.handle(VOICE_PROTOCOL_SCHEME, (request) =>
@@ -599,6 +617,11 @@ app.on('will-quit', (event) => {
   cleanupPiChildTempDir()
 })
 
+// The browser bridge outlives the shutdown flow above; close it as the app exits.
+app.on('quit', () => {
+  void stopAppBrowserBridge()
+})
+
 // Security: prevent new window creation, and stop preview <webview> guests from
 // navigating away from their local file (e.g. a malicious HTML file redirecting
 // itself to a remote URL to phone home).
@@ -611,7 +634,9 @@ app.on('web-contents-created', (_event, contents) => {
       // An untrusted preview may not navigate away from its local file (e.g. a
       // malicious page redirecting itself to a remote URL). Trusted previews of
       // your own project may navigate freely.
-      if (!url.startsWith('file://') && !isActiveWorkspaceTrusted()) event.preventDefault()
+      // The browser panel's guest is exempt (compared by session object, not by partition string).
+      const isBrowserGuest = contents.session === session.fromPartition(BROWSER_PARTITION)
+      if (shouldBlockGuestNavigation({ isBrowserGuest, url, workspaceTrusted: isActiveWorkspaceTrusted() })) event.preventDefault()
     })
   }
 })

@@ -7,6 +7,33 @@
 import type { PermissionRule } from '../../resources/permission-rules'
 import type { LinkedTaskMode, RepoRole } from '../../resources/repo-set-map'
 import type { TokenUsage } from './token-usage'
+import type { BrowserMarkPick, BrowserMarksSnapshot, BrowserState } from './browser'
+
+export type {
+  BrowserCapture,
+  BrowserCaptureLayout,
+  BrowserCaptureOptions,
+  BrowserMark,
+  BrowserMarkDraft,
+  BrowserMarkPick,
+  BrowserMarksSnapshot,
+  BrowserScreenshot,
+  BrowserScreenshotOptions,
+  BrowserState,
+  BrowserViewport,
+  ConsoleEntry,
+} from './browser'
+
+/** Main -> renderer: the browser of a session changed. `state` is null once its panel is closed. */
+export interface BrowserStateEvent {
+  sessionKey: string
+  state: BrowserState | null
+}
+
+/** Main -> renderer: the marks or the mark mode of a session changed, or an element was picked. */
+export type BrowserMarksEvent =
+  | ({ kind: 'marks'; sessionKey: string } & BrowserMarksSnapshot)
+  | { kind: 'pick'; sessionKey: string; pick: BrowserMarkPick }
 
 // ─── IPC Channel Names ──────────────────────────────────────────────────────
 
@@ -103,6 +130,22 @@ export const IPC_CHANNELS = {
   // Subagent panel
   SUBAGENT_LIST: 'subagent:list',
   SUBAGENT_GET_TRANSCRIPT: 'subagent:get-transcript',
+
+  // Browser panel (the <webview> guest registered with the main-process controller)
+  BROWSER_REGISTER: 'browser:register',
+  BROWSER_UNREGISTER: 'browser:unregister',
+  BROWSER_SET_VIEWPORT: 'browser:set-viewport',
+  BROWSER_SET_PANE_SIZE: 'browser:set-pane-size',
+  BROWSER_SCREENSHOT: 'browser:screenshot',
+  BROWSER_GET_STATE: 'browser:get-state',
+  BROWSER_MARKS_LIST: 'browser:marks-list',
+  BROWSER_SET_MARK_MODE: 'browser:set-mark-mode',
+  BROWSER_ADD_MARK: 'browser:add-mark',
+  BROWSER_UPDATE_MARK_NOTE: 'browser:update-mark-note',
+  BROWSER_REMOVE_MARK: 'browser:remove-mark',
+  BROWSER_CLEAR_MARKS: 'browser:clear-marks',
+  BROWSER_MARKS_SENT: 'browser:marks-sent',
+  BROWSER_CAPTURE: 'browser:capture',
 
   // Diagnostics
   DIAGNOSTICS_GET: 'diagnostics:get',
@@ -226,6 +269,8 @@ export const IPC_CHANNELS = {
   EVENT_COUNCIL_PROGRESS: 'event:council-progress',
   EVENT_VOICE_PROGRESS: 'event:voice-progress',
   EVENT_VOICE_SHORTCUT: 'event:voice-shortcut',
+  EVENT_BROWSER_STATE: 'event:browser-state',
+  EVENT_BROWSER_MARKS: 'event:browser-marks',
 
   // Voice dictation
   VOICE_STATUS: 'voice:status',

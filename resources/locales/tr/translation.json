@@ -25,6 +25,58 @@
       "downloadButton": "İndir"
     }
   },
+  "browser": {
+    "download": {
+      "done": "",
+      "failed": ""
+    },
+    "marks": {
+      "attach": "",
+      "chip_one": "",
+      "chip_other": "",
+      "clear": "",
+      "editNote": "",
+      "hint": "",
+      "noteHint": "",
+      "notePlaceholder": "",
+      "noteTitle": "",
+      "remove": "",
+      "sent": "",
+      "title_one": "",
+      "title_other": "",
+      "toggle": ""
+    },
+    "shot": {
+      "dismiss": "",
+      "failed": "",
+      "fullPage": "",
+      "menu": "",
+      "visible": "",
+      "withMarks": ""
+    },
+    "toolbar": {
+      "address": "",
+      "addressPlaceholder": "",
+      "back": "",
+      "close": "",
+      "devtools": "",
+      "forward": "",
+      "loading": "",
+      "openExternal": "",
+      "reload": "",
+      "stop": ""
+    },
+    "viewport": {
+      "apply": "",
+      "custom": "",
+      "height": "",
+      "menu": "",
+      "pixelRatio": "",
+      "reset": "",
+      "scaleToFit": "",
+      "width": ""
+    }
+  },
   "chat": {
     "activity": {
       "stalled": "Model {{silent}} süredir yanıt vermiyor. Sağlayıcı yavaş olabilir.",
@@ -168,6 +220,7 @@
       "viewSource": "Kaynağı göster"
     },
     "toolbar": {
+      "browser": "",
       "diffViewer": "Fark görüntüleyici",
       "fileTree": "Dosya ağacı",
       "reviewPanel": "İnceleme paneli",

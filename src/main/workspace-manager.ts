@@ -1,7 +1,7 @@
 import { dirname, basename, join, resolve } from 'path'
 import { readFile, writeFile, mkdir, rename, copyFile, rm } from 'fs/promises'
 import { existsSync } from 'fs'
-import { PiRpcManager } from './pi-rpc-manager'
+import { PiRpcManager, getPiCli } from './pi-rpc-manager'
 import { FileService } from './file-service'
 import {
   WHOLE_WORKSPACE_CHANGE_PATH,
@@ -46,6 +46,10 @@ import { t, tEnglish } from '../shared/i18n'
 import { OMP_SUBAGENT_SUBSCRIPTION_LEVEL } from '../shared/subagent-task'
 import { REPO_MAP_ENV, serializeRepoMap } from '../../resources/repo-set-map'
 import { agentResourcePath } from './agent-resources'
+import { browserBridgeEnv } from './browser/browser-bridge'
+import { rekeyBrowser } from './browser/browser-controller'
+import { noBrowserSessionKey } from '../shared/browser'
+import { BROWSER_EXTENSION_FILE } from '../../resources/browser-tools'
 import { workspaceTrustStore } from './workspace-trust'
 import { inspectRepoFolder } from './repo-sets'
 import { checkoutForLinkedTask, checkoutLinkedTask, removeLinkedTaskCheckouts } from './linked-worktrees'
@@ -649,6 +653,16 @@ export class WorkspaceManager {
     if (workspace.linkedTask) {
       startOptions.args = [...(startOptions.args ?? []), '-e', this.resolveAgentResource(REPO_SET_EXTENSION_FILE)]
       startOptions.env = { ...startOptions.env, [REPO_MAP_ENV]: await this.writeRepoMap(workspace) }
+    }
+    // The browser tools are Pi's: they reach the panel of this runtime through
+    // the app's loopback bridge, keyed by the runtime id known only here.
+    const bridgeEnv = browserBridgeEnv(runtimeId)
+    if (bridgeEnv && (startOptions.engine ?? getPiCli().kind ?? 'pi') === 'pi') {
+      const browserExtension = this.resolveAgentResource(BROWSER_EXTENSION_FILE)
+      if (existsSync(browserExtension)) {
+        startOptions.args = [...(startOptions.args ?? []), '-e', browserExtension]
+        startOptions.env = { ...startOptions.env, ...bridgeEnv }
+      }
     }
     // Re-activating an evicted tab spawns a process again, so the budget has to
     // hold here too; an already-live runtime spawns nothing and needs no room.
@@ -1420,6 +1434,9 @@ export class WorkspaceManager {
       runtime = this.createSessionRuntime(workspaceId, options?.sessionPath ?? null)
       this.activeRuntimeByWorkspace.set(workspaceId, runtime.info.runtimeId)
       if (this.activeWorkspaceId === workspaceId) this.activeRuntimeId = runtime.info.runtimeId
+      // The panel opened before the first prompt belongs to this new session. It moves before the engine
+      // starts, so the extension's first GET /state already finds the browser under the runtime id.
+      rekeyBrowser(noBrowserSessionKey(workspaceId), runtime.info.runtimeId)
     }
 
     await this.startSessionRuntime(runtime.info.runtimeId, {

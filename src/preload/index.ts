@@ -1,5 +1,16 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
+  BrowserCapture,
+  BrowserCaptureOptions,
+  BrowserMark,
+  BrowserMarkDraft,
+  BrowserMarksEvent,
+  BrowserMarksSnapshot,
+  BrowserScreenshot,
+  BrowserScreenshotOptions,
+  BrowserState,
+  BrowserStateEvent,
+  BrowserViewport,
   AgentEngineKind,
   PiRpcEvent,
   PiStartOptions,
@@ -394,6 +405,26 @@ interface PiDesktopAPI {
     getTranscript(runtimeId: string, ref: SubagentTranscriptRef, cursor: number): Promise<SubagentTranscriptResult>
   }
 
+  // Browser panel: register the <webview> guest with the main-process controller
+  browser: {
+    register(sessionKey: string, webContentsId: number): Promise<BrowserState>
+    unregister(sessionKey: string): Promise<void>
+    setViewport(sessionKey: string, viewport: BrowserViewport | null): Promise<BrowserState | null>
+    setPaneSize(sessionKey: string, width: number, height: number): Promise<void>
+    screenshot(sessionKey: string, options?: BrowserScreenshotOptions): Promise<BrowserScreenshot>
+    getState(sessionKey: string): Promise<BrowserState | null>
+    onState(callback: (event: BrowserStateEvent) => void): () => void
+    getMarks(sessionKey: string): Promise<BrowserMarksSnapshot>
+    setMarkMode(sessionKey: string, on: boolean): Promise<boolean>
+    addMark(sessionKey: string, draft: BrowserMarkDraft, note?: string): Promise<BrowserMark>
+    updateMarkNote(sessionKey: string, id: number, note: string | null): Promise<void>
+    removeMark(sessionKey: string, id: number): Promise<void>
+    clearMarks(sessionKey: string): Promise<void>
+    markSent(sessionKey: string, ids: number[]): Promise<void>
+    capture(sessionKey: string, options?: BrowserCaptureOptions): Promise<BrowserCapture>
+    onMarks(callback: (event: BrowserMarksEvent) => void): () => void
+  }
+
   // Diagnostics report
   diagnostics: {
     get(): Promise<DiagnosticsReport>
@@ -696,6 +727,33 @@ const api: PiDesktopAPI = {
   subagents: {
     list: (runtimeId) => ipcRenderer.invoke(IPC_CHANNELS.SUBAGENT_LIST, runtimeId),
     getTranscript: (runtimeId, ref, cursor) => ipcRenderer.invoke(IPC_CHANNELS.SUBAGENT_GET_TRANSCRIPT, runtimeId, ref, cursor),
+  },
+
+  browser: {
+    register: (sessionKey, webContentsId) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_REGISTER, sessionKey, webContentsId),
+    unregister: (sessionKey) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_UNREGISTER, sessionKey),
+    setViewport: (sessionKey, viewport) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_SET_VIEWPORT, sessionKey, viewport),
+    setPaneSize: (sessionKey, width, height) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_SET_PANE_SIZE, sessionKey, width, height),
+    screenshot: (sessionKey, options) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_SCREENSHOT, sessionKey, options),
+    getState: (sessionKey) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_GET_STATE, sessionKey),
+    onState: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: BrowserStateEvent) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.EVENT_BROWSER_STATE, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.EVENT_BROWSER_STATE, handler)
+    },
+    getMarks: (sessionKey) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_MARKS_LIST, sessionKey),
+    setMarkMode: (sessionKey, on) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_SET_MARK_MODE, sessionKey, on),
+    addMark: (sessionKey, draft, note) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_ADD_MARK, sessionKey, draft, note),
+    updateMarkNote: (sessionKey, id, note) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_UPDATE_MARK_NOTE, sessionKey, id, note),
+    removeMark: (sessionKey, id) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_REMOVE_MARK, sessionKey, id),
+    clearMarks: (sessionKey) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_CLEAR_MARKS, sessionKey),
+    markSent: (sessionKey, ids) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_MARKS_SENT, sessionKey, ids),
+    capture: (sessionKey, options) => ipcRenderer.invoke(IPC_CHANNELS.BROWSER_CAPTURE, sessionKey, options),
+    onMarks: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: BrowserMarksEvent) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.EVENT_BROWSER_MARKS, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.EVENT_BROWSER_MARKS, handler)
+    },
   },
 
   diagnostics: {

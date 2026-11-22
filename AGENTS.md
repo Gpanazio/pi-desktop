@@ -69,6 +69,7 @@ src/
 │   ├── git-diff.ts               # Diff path model (Git C-quoting), pinned diff options, splitting, repository-root -> workspace path helpers
 │   ├── file-url.ts               # file:// URLs for local paths, every segment percent-encoded (drive and UNC paths)
 │   ├── preview-partitions.ts     # File-preview <webview> partition names, the ones main hardens
+│   ├── browser.ts                # Browser panel: partition, state/mark types, viewport presets and clamp, address-bar normalization
 │   ├── repo-set-draft.ts         # Repo set editing: unique names; the first repository is the main one
 │   ├── subagent-task.ts          # Subagent rows for the Subagents panel, rail badge and composer strip: parsers and reducers
 │   ├── untrusted-data.ts         # Wrap file/agent text as a labeled untrusted-data block
@@ -107,6 +108,7 @@ src/
 │   ├── session-trash.ts          # Deleted sessions go to the desktop trash (trash-cli, then gio)
 │   ├── path-authorization.ts     # Path containment checks (attachment/session IPC)
 │   ├── renderer-origin.ts        # Trusted-renderer URL check (navigation + IPC sender)
+│   ├── browser/                  # Browser panel guest (`persist:pi-browser`): controller (getBrowser/onBrowserChange, CDP, marks, console), guest rules, Chrome user agent, session wiring; `browser-actions.ts` (the agent's actions: accessibility snapshot with refs, click/type/press, eval) and `browser-bridge.ts` (loopback HTTP server, bearer token, Host/Origin checks) serve the agent's browser tools
 │   ├── preview-guest.ts          # File-preview guest rules: which guest is the PDF preview, scripts, per-partition request block
 │   ├── window-background.ts      # Native window background that follows the theme
 │   ├── workspace-trust.ts        # Per-workspace trust registry (gates allow rules + preview)
@@ -302,6 +304,8 @@ resources/
 ├── pi-desktop-permissions.ts     # Pi extension that enforces permission modes and rules
 ├── pi-desktop-repo-set.ts        # Pi extension that tells the agent the repositories of a linked task
 ├── pi-desktop-next-steps.ts      # Pi extension: the suggest_next_steps tool and the rule for when to call it
+├── pi-desktop-browser.ts         # Pi extension: the browser_* tools, active only while the session's browser panel is open (Pi only)
+├── browser-tools.ts              # Browser tool names, schemas, the active-tool rule and context line, shared by the extension and tests
 ├── next-steps.ts                 # Next-steps tool contract and step parsing (both call forms), shared by the extension, main, and renderer
 ├── system-prompt.ts              # Append to the system prompt in the shape each engine uses
 ├── repo-set-map.ts               # Linked task repo map; the target paths of a tool call, expanded the way Pi does
@@ -598,6 +602,7 @@ pi --mode rpc [--no-session] [--provider <name>] [--model <id>] [--thinking <lev
 - The extension reads its settings from `PI_DESKTOP_*` environment variables (mode, agent label, language, rules path, workspace trust)
 - While Suggest Next Steps is on, `-e` also loads `pi-desktop-next-steps.ts`, and Plan / Read-only mode adds `suggest_next_steps` to `--tools`. The agent may end a turn with up to three steps; the chat hides the call and shows the steps as buttons that fill the composer. With its `tools.xdev` setting on, OMP sends the call as a `write` to `xd://suggest_next_steps`: the chat reads that form too, and the permission and linked-task checks treat it as no file write (`resources/next-steps.ts`)
 - A linked task's runtime also loads `pi-desktop-repo-set.ts` and gets `PI_DESKTOP_REPO_MAP_PATH`, its repo map under `<GUI data dir>/repo-maps/` (`WorkspaceManager.startSessionRuntime`)
+- Pi sessions also load `pi-desktop-browser.ts` and get `PI_DESKTOP_BROWSER_URL`, `PI_DESKTOP_BROWSER_TOKEN` and `PI_DESKTOP_SESSION_KEY` (the runtime id), added in `WorkspaceManager.startSessionRuntime` where the runtime id is known. The extension registers the `browser_*` tools inactive and, in `before_agent_start`, activates them only while `GET /state` says the panel is open (and never in Plan / Read-only mode), then removes them when it closes; the switch applies to the same turn
 - No `--session-dir` is added; each engine uses its own default store. A caller-supplied `--session-dir` in extra args still wins
 
 Communication is JSONL over stdin/stdout:

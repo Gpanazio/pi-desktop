@@ -25,6 +25,9 @@ import { workspaceNameFromFolderPath } from '../../shared/folder-drop'
 import { pathsEqual } from '../../shared/path-compare'
 import { EDITED_TITLE_MAX_CHARS, sessionPreview, stripInjectedPreamble, truncateTitle } from '../../shared/session-preview'
 import { validateModelsConfig, mergeModelsConfig, type ModelsConfig } from '../../shared/models-config'
+import { browserSessionKey, migrateBrowserSession, patchBrowserSession, type BrowserPanelSession } from './utils/browser-panel-state'
+import { attachBrowserMarks, confirmBrowserMarksSent } from './utils/browser-marks-send'
+import { browserMarksDeps } from './utils/browser-capture'
 import {
   applyOmpLifecycle,
   applyOmpProgress,
@@ -113,7 +116,7 @@ export interface PreviewTarget {
 }
 
 /** A secondary view in the chat's side slot. */
-export type ChatSidePanel = 'files' | 'diff' | 'tasks'
+export type ChatSidePanel = 'files' | 'diff' | 'tasks' | 'browser'
 
 /**
  * Whether a side panel takes the whole side slot. The chat then shows no file
@@ -121,7 +124,7 @@ export type ChatSidePanel = 'files' | 'diff' | 'tasks'
  * The layout and the actions that open a panel read this one rule.
  */
 export function sidePanelHidesPreview(panel: ChatSidePanel | null): boolean {
-  return panel === 'diff' || panel === 'tasks'
+  return panel === 'diff' || panel === 'tasks' || panel === 'browser'
 }
 
 // ─── Composer Draft ──────────────────────────────────────────────────────────
@@ -352,6 +355,9 @@ interface AppState {
   // in the chat workspace. Lifted into the store so it survives navigating
   // away from chat (e.g. into Settings) and back.
   chatSidePanel: ChatSidePanel | null
+  // Browser panel state (url, width, viewport) per session runtime id; it lives
+  // as long as the app runs.
+  browserSessions: Record<string, BrowserPanelSession>
   sidebarOpen: boolean
   terminalOpen: boolean
   reviewOpen: boolean
@@ -485,6 +491,8 @@ interface AppState {
   // A prompt queued for insertion into the chat input. The nonce lets the
   // chat input re-apply the same text on repeated inserts.
   pendingInsert: { text: string; nonce: number; replace?: boolean } | null
+  // Attachments other panels stage for the composer (the browser panel's screenshots); the composer takes them.
+  stagedComposerAttachments: ComposerAttachment[]
   // Set when a session opens; the chat input takes focus once it can, unless
   // the user leaves chat or focuses something else first.
   composerFocusRequested: boolean
@@ -589,7 +597,9 @@ interface AppActions {
   requestChatScrollToBottom: () => void
   // Resolves false when a dirty-editor discard was declined (only a panel
   // that hides the preview asks).
-  setChatSidePanel: (panel: ChatSidePanel | null) => Promise<boolean>
+  // `followSession`: the panel follows the session that came on screen, so no session's browser flag is written.
+  setChatSidePanel: (panel: ChatSidePanel | null, options?: { followSession?: boolean }) => Promise<boolean>
+  patchBrowserSession: (key: string, patch: Partial<BrowserPanelSession>) => void
   toggleSidebar: () => void
   toggleTerminal: () => void
   toggleReview: () => void
@@ -714,6 +724,8 @@ interface AppActions {
   deleteNote: (id: string) => Promise<void>
   insertPrompt: (text: string, replace?: boolean) => void
   clearPendingInsert: () => void
+  stageComposerAttachment: (attachment: ComposerAttachment) => void
+  clearStagedComposerAttachments: () => void
   setNotePickerOpen: (open: boolean) => void
   toggleAllThinking: () => void
   setCommandPalette: (open: boolean) => void
@@ -753,6 +765,13 @@ function normalizePiCommands(raw: unknown): PiCommand[] {
 // Navigation invalidates all session I/O. History and state requests also
 // have their own sequence so overlapping loads of one session cannot rewind it.
 let sessionLoadGeneration = 0
+/** Counts the startPi calls that are creating the runtime of a chat that had none. */
+let startingEmptyChat = 0
+/** The browser panel opened before a chat's first prompt moves to the runtime id the prompt creates. */
+function adoptNoSessionBrowser(state: { browserSessions: Record<string, BrowserPanelSession> }, runtimeId: string, workspaceId: string | null): { browserSessions?: Record<string, BrowserPanelSession> } {
+  const next = migrateBrowserSession(state.browserSessions, runtimeId, workspaceId)
+  return next === state.browserSessions ? {} : { browserSessions: next }
+}
 let historyLoadId = 0
 let sessionStateRequestId = 0
 let historyLoadingRuntime: string | null = null
@@ -1189,6 +1208,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   workflowPanelWorkspaceId: null,
   chatScrollBottomNonce: 0,
   chatSidePanel: null,
+  browserSessions: {},
   sidebarOpen: true,
   terminalOpen: false,
   reviewOpen: false,
@@ -1276,6 +1296,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
   diffShortcutRequest: null,
   pendingInsert: null,
+  stagedComposerAttachments: [],
   composerFocusRequested: false,
   modelPickerOpen: false,
   noteDraft: null,
@@ -1290,6 +1311,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     if (pendingLastSessionOpen) await pendingLastSessionOpen
     // Don't start if already running
     if (get().piStatus === 'running') return
+    // A chat with no runtime gets one here: its browser panel (open before the first prompt) goes with it.
+    const bornRuntime = get().activeSessionRuntimeId === null
+    if (bornRuntime) startingEmptyChat += 1
     const gen = sessionLoadGeneration
     const workspaceId = get().activeWorkspace?.id
     const isCurrent = (): boolean => gen === sessionLoadGeneration && workspaceId === get().activeWorkspace?.id
@@ -1315,6 +1339,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     } catch (err) {
       if (!isCurrent()) return
       set({ piStatus: 'error', piStartupPhase: null, piError: err instanceof Error ? err.message : String(err) })
+    } finally {
+      if (bornRuntime) {
+        startingEmptyChat -= 1
+        // The runtime event may have come before or after pi.start answered; moving twice is a no-op.
+        const runtimeId = get().activeSessionRuntimeId
+        const runtimeWorkspaceId = runtimeId === null ? null : (get().sessionRuntimes[runtimeId]?.workspaceId ?? null)
+        if (runtimeId !== null && runtimeWorkspaceId !== null && runtimeWorkspaceId === workspaceId) set((state) => adoptNoSessionBrowser(state, runtimeId, runtimeWorkspaceId))
+      }
     }
   },
 
@@ -1417,8 +1449,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   // ─── Prompts ──────────────────────────────────────────────────────────
 
-  sendPrompt: async (message, options) => {
-    const trimmed = message.trim().toLowerCase()
+  sendPrompt: async (typedMessage, typedOptions) => {
+    const trimmed = typedMessage.trim().toLowerCase()
     if (trimmed === '/workflow' || trimmed === '/workflows') {
       // Route through the action so a session-scoped filter can never leak
       // into the global view opened from chat.
@@ -1435,6 +1467,18 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     }
     // The user sends again, so a held queue may go on after this turn.
     releaseSendQueue(set, get)
+
+    // The session's pending browser marks ride along with the prompt (not with a slash command).
+    const browserKey = browserSessionKey(get().activeSessionRuntimeId, get().activeWorkspace?.id)
+    // A session whose browser panel was never opened has no marks, so it pays no extra round trip.
+    const browserSession = get().browserSessions[browserKey]
+    const withMarks =
+      !trimmed.startsWith('/') && browserSession !== undefined && browserSession.attachMarks !== false
+        ? await attachBrowserMarks(typedMessage, typedOptions, browserMarksDeps(browserKey))
+        : { message: typedMessage, options: typedOptions, sentIds: [] as number[] }
+    const { message, options, sentIds } = withMarks
+    // The marks count as sent only once the prompt went out; until then they stay pending.
+    let delivered = false
 
     const { sessionState, settings } = get()
 
@@ -1467,6 +1511,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         // Queue as steering during streaming, carrying any image attachments.
         recordLocalEcho(message)
         await window.piDesktop.commands.steer(message, options?.images)
+        delivered = true
       } else {
         const prompt = settings?.permissionMode === 'plan-readonly'
           ? buildPlanningPrompt(message)
@@ -1482,9 +1527,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         // Set before the prompt goes out: OMP can report the outcome before its answer.
         latestPrompt = { generation: gen, runsAtSend }
         const response = await window.piDesktop.commands.prompt(prompt, options)
+        const refusal = promptRefusal(response)
+        delivered = refusal === null
         if (!isCurrent()) return
         // None of these answers starts a turn, so no agent_end will end the stream.
-        const refusal = promptRefusal(response)
         if (refusal) endTurnWithoutAgent(set, get, refusal.reason)
         // OMP answers a local slash command (`/context`) in the response itself.
         else if (promptRanWithoutAgent(response)) endTurnWithoutAgent(set, get)
@@ -1501,6 +1547,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         timestamp: Date.now(),
       })
       if (!isStreaming) set({ isStreaming: false })
+    } finally {
+      confirmBrowserMarksSent(delivered, sentIds, (ids) => window.piDesktop.browser.markSent(browserKey, ids))
     }
   },
 
@@ -2414,17 +2462,26 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
   requestChatScrollToBottom: () =>
     set((state) => ({ chatScrollBottomNonce: state.chatScrollBottomNonce + 1 })),
-  setChatSidePanel: async (panel) => {
+  setChatSidePanel: async (panel, options) => {
     // A panel that hides the preview unmounts a dirty FilePreview, so it asks
     // first. The file tree leaves the editor mounted beside it.
     if (sidePanelHidesPreview(panel)) {
       if (!(await get().confirmDiscardEditorChanges())) return false
       set({ chatSidePanel: panel, editorDirty: false })
-      return true
+    } else {
+      set({ chatSidePanel: panel })
     }
-    set({ chatSidePanel: panel })
+    // The browser panel is open or closed per session.
+    if (options?.followSession) return true
+    set((state) => ({
+      browserSessions: patchBrowserSession(state.browserSessions, browserSessionKey(state.activeSessionRuntimeId, state.activeWorkspace?.id), {
+        open: panel === 'browser',
+      }),
+    }))
     return true
   },
+  patchBrowserSession: (key, patch) =>
+    set((state) => ({ browserSessions: patchBrowserSession(state.browserSessions, key, patch) })),
 
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 
@@ -2920,6 +2977,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       return
     }
     set((current) => ({
+      ...(runtime.active && current.activeSessionRuntimeId === null && startingEmptyChat > 0 && runtime.workspaceId === current.activeWorkspace?.id ? adoptNoSessionBrowser(current, runtime.runtimeId, runtime.workspaceId) : {}),
       sessionRuntimes: { ...current.sessionRuntimes, [runtime.runtimeId]: runtime },
       activeSessionRuntimeId: runtime.active
         ? runtime.runtimeId
@@ -3726,6 +3784,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     })),
 
   clearPendingInsert: () => set({ pendingInsert: null }),
+  stageComposerAttachment: (attachment) =>
+    set((state) => ({ stagedComposerAttachments: [...state.stagedComposerAttachments, attachment] })),
+  clearStagedComposerAttachments: () => set({ stagedComposerAttachments: [] }),
 
   setNotePickerOpen: (open) => set({ notePickerOpen: open }),
 

@@ -31,6 +31,8 @@ import { FileTree, FileSearch, FilePreview } from './file-tree'
 import { ImageViewer } from './image-viewer'
 import { DiffViewer } from './diff-viewer'
 import { SubagentPanel } from './subagent-panel'
+import { BrowserPanelPool } from './browser-panel-pool'
+import { browserSessionKey } from '../utils/browser-panel-state'
 import { TerminalPanel } from './terminal'
 import { isFileWatchDemanded, useChatScroll, useChatVisible, useChatWidth } from '../hooks'
 import { messageColumnClass } from '../utils/chat-width'
@@ -84,6 +86,19 @@ export function ChatPanel(): React.JSX.Element {
   const sidePanel = useAppStore((state) => state.chatSidePanel)
   const setSidePanel = useAppStore((state) => state.setChatSidePanel)
   const [sidePanelWidth, setSidePanelWidth] = useState(DEFAULT_SIDE_PANEL_WIDTH)
+  // The browser panel is open or closed per session, and keeps its own width.
+  const browserKey = useAppStore((state) => browserSessionKey(state.activeSessionRuntimeId, state.activeWorkspace?.id))
+  const browserWidth = useAppStore((state) => state.browserSessions[browserKey]?.width ?? null)
+  useEffect(() => {
+    // Switching session brings that session's choice back: its browser, or no browser.
+    const state = useAppStore.getState()
+    const wanted = state.browserSessions[browserKey]?.open === true
+    // followSession: this only brings the panel in line with the session, it never changes a session's own flag.
+    if (wanted && state.chatSidePanel !== 'browser') void state.setChatSidePanel('browser', { followSession: true })
+    else if (!wanted && state.chatSidePanel === 'browser') void state.setChatSidePanel(null, { followSession: true })
+  }, [browserKey])
+  const [browserSlot, setBrowserSlot] = useState<HTMLDivElement | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const [filePaneWidth, setFilePaneWidth] = useState(DEFAULT_FILE_PANE_WIDTH)
 
   // One shared clock for all relative-time labels — refresh every 30s so
@@ -156,6 +171,7 @@ export function ChatPanel(): React.JSX.Element {
   const showEditor = previewTarget?.kind === 'code' && previewAllowed
   const showDiff = sidePanel === 'diff'
   const showTasks = sidePanel === 'tasks'
+  const showBrowser = sidePanel === 'browser'
   const sidePanes = { showFileTree, showEditor, showImage }
   const paneLayout = resolvePaneLayout(
     panelRowWidth,
@@ -172,7 +188,7 @@ export function ChatPanel(): React.JSX.Element {
     maxFilePaneWidth,
   } = resolveSidePanelMetrics(
     sidePanes,
-    sidePanelWidth,
+    showBrowser ? (browserWidth ?? DEFAULT_SIDE_PANEL_WIDTH) : sidePanelWidth,
     filePaneWidth,
     // Stacked under the chat column, the side panel spans that column, so its
     // ceiling is the whole column rather than what the column leaves beside it.
@@ -209,6 +225,13 @@ export function ChatPanel(): React.JSX.Element {
               setFilePaneWidth((width) =>
                 clamp(width - delta, MIN_FILE_PANE_WIDTH, maxFilePaneWidth)
               )
+              return
+            }
+
+            if (showBrowser) {
+              useAppStore.getState().patchBrowserSession(browserKey, {
+                width: clamp(sidePanelContentWidth - delta, minSidePanelWidth, maxSidePanelWidth),
+              })
               return
             }
 
@@ -249,6 +272,8 @@ export function ChatPanel(): React.JSX.Element {
             <SubagentPanel onClose={() => setSidePanel(null)} />
           </div>
         )}
+        {/* Only the place: the pool below keeps the <webview>s mounted and puts the active one here. */}
+        {showBrowser && <div ref={setBrowserSlot} className="min-w-0 flex-1" />}
         {showEditor && (
           <div
             className={clsx(
@@ -284,7 +309,7 @@ export function ChatPanel(): React.JSX.Element {
   ) : null
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div ref={rootRef} className="relative flex flex-1 flex-col overflow-hidden">
       {/* One grid holds the chat column and both panes in every placement. A pane
           that moves beside or under the chat column keeps its parent and its slot,
           so React does not mount it again (the editor keeps its unsaved edits). */}
@@ -440,6 +465,8 @@ export function ChatPanel(): React.JSX.Element {
         {sidePanelPane}
         {paneLayout.review !== null && <ReviewRail placement={paneLayout.review} />}
       </div>
+
+      <BrowserPanelPool rootRef={rootRef} slotEl={browserSlot} activeKey={browserKey} showing={showBrowser} onClose={() => void setSidePanel(null)} />
 
       {/* Terminal panel */}
       <TerminalPanel />

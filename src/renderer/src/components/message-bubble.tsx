@@ -26,6 +26,7 @@ import { RelativeTime } from '../utils/relative-time'
 import { isImeComposing } from '../utils/ime-composing'
 import { clsx } from 'clsx'
 import { splitAttachedFiles } from '../../../shared/untrusted-data'
+import { splitBrowserMarks, type ParsedBrowserMarksBlock } from '../../../shared/browser-marks'
 import { backgroundSummary, parseBashBackgroundText } from '../../../shared/bash-background'
 import {
   Copy,
@@ -42,6 +43,7 @@ import {
   ImageOff,
   Square,
   FileText,
+  Crosshair,
 } from 'lucide-react'
 
 function MessageBubbleImpl({
@@ -239,7 +241,9 @@ function UserMessage({
   const { t } = useTranslation()
   const editRef = useRef<HTMLTextAreaElement>(null)
   // Attached text files travel inside the prompt; show them as chips.
-  const attachedFiles = useMemo(() => splitAttachedFiles(message.content), [message.content])
+  // The browser marks sit after them; they show as a chip, and the model still gets the whole text.
+  const browserMarks = useMemo(() => splitBrowserMarks(message.content), [message.content])
+  const attachedFiles = useMemo(() => splitAttachedFiles(browserMarks.text), [browserMarks.text])
 
   // Open the editor at the height of the message it edits, not one row.
   useLayoutEffect(() => {
@@ -287,7 +291,7 @@ function UserMessage({
     )
   }
 
-  const hasChips = (message.attachments?.length ?? 0) > 0 || attachedFiles.fileNames.length > 0
+  const hasChips = (message.attachments?.length ?? 0) > 0 || attachedFiles.fileNames.length > 0 || browserMarks.blocks.length > 0
   return (
     <div className="group mb-4 flex justify-end animate-fade-in">
       <div className="relative max-w-[80%]">
@@ -324,6 +328,9 @@ function UserMessage({
                   <span className="truncate">{name}</span>
                 </div>
               ))}
+              {browserMarks.blocks.map((block, index) => (
+                <BrowserMarksChip key={`${block.url}-${index}`} block={block} />
+              ))}
             </div>
           )}
           {attachedFiles.text && <div className="font-chat whitespace-pre-wrap break-words">{attachedFiles.text}</div>}
@@ -343,6 +350,38 @@ function UserMessage({
           {!readOnly && <ActionButton icon={<Download size={11} />} onClick={onExport} title={t('common.export')} />}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** The marks a prompt carried, as one chip that opens to the numbered list. */
+function BrowserMarksChip({ block }: { block: ParsedBrowserMarksBlock }): React.JSX.Element {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="max-w-full rounded-md border border-white/20 bg-black/10 text-xs text-secondary" title={block.url}>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex w-full max-w-full items-center gap-1.5 px-2 py-1 text-left hover:text-primary"
+      >
+        <Crosshair size={12} className="shrink-0 text-muted" aria-hidden="true" />
+        <span className="truncate">{t('browser.marks.chip', { count: block.marks.length, host: block.host })}</span>
+        {open ? <ChevronDown size={12} className="shrink-0" aria-hidden="true" /> : <ChevronRight size={12} className="shrink-0" aria-hidden="true" />}
+      </button>
+      {open && (
+        <ol className="space-y-1 border-t border-white/10 px-2 py-1.5">
+          {block.marks.map((entry) => (
+            <li key={entry.number} className="break-words">
+              <span className="mr-1 text-muted">{entry.number}.</span>
+              <span className="font-mono">{entry.selector}</span>
+              {entry.text && <span className="text-muted">{` · “${entry.text}”`}</span>}
+              {entry.note && <span>{` · ${entry.note}`}</span>}
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   )
 }

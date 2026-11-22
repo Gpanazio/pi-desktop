@@ -25,6 +25,58 @@
       "downloadButton": "Download"
     }
   },
+  "browser": {
+    "download": {
+      "done": "Download complete",
+      "failed": "Download failed"
+    },
+    "marks": {
+      "attach": "Attach marks when sending",
+      "chip_one": "{{count}} mark · {{host}}",
+      "chip_other": "{{count}} marks · {{host}}",
+      "clear": "Clear all",
+      "editNote": "Edit note",
+      "hint": "Click an element to mark it · Shift+click marks several · Esc exits",
+      "noteHint": "Enter to confirm · Esc to cancel",
+      "notePlaceholder": "Note (optional)",
+      "noteTitle": "Note for the mark",
+      "remove": "Remove mark",
+      "sent": "Sent",
+      "title_one": "Marks ({{count}})",
+      "title_other": "Marks ({{count}})",
+      "toggle": "Mark elements (M)"
+    },
+    "shot": {
+      "dismiss": "Dismiss",
+      "failed": "Could not take the screenshot",
+      "fullPage": "Full page",
+      "menu": "Screenshot to chat",
+      "visible": "Visible area",
+      "withMarks": "With marks"
+    },
+    "toolbar": {
+      "address": "Address",
+      "addressPlaceholder": "Search or enter address",
+      "back": "Back",
+      "close": "Close browser",
+      "devtools": "Page developer tools",
+      "forward": "Forward",
+      "loading": "Loading",
+      "openExternal": "Open in system browser",
+      "reload": "Reload",
+      "stop": "Stop loading"
+    },
+    "viewport": {
+      "apply": "Apply",
+      "custom": "Custom…",
+      "height": "Height",
+      "menu": "Viewport",
+      "pixelRatio": "Pixel ratio",
+      "reset": "Reset",
+      "scaleToFit": "Scale to fit",
+      "width": "Width"
+    }
+  },
   "chat": {
     "activity": {
       "stalled": "No reply from the model for {{silent}}. The provider may be slow.",
@@ -168,6 +220,7 @@
       "viewSource": "View source"
     },
     "toolbar": {
+      "browser": "Browser",
       "diffViewer": "Diff viewer",
       "fileTree": "File tree",
       "reviewPanel": "Review panel",

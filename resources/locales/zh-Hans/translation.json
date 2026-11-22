@@ -25,6 +25,56 @@
       "downloadButton": "下载"
     }
   },
+  "browser": {
+    "download": {
+      "done": "",
+      "failed": ""
+    },
+    "marks": {
+      "attach": "",
+      "chip_other": "",
+      "clear": "",
+      "editNote": "",
+      "hint": "",
+      "noteHint": "",
+      "notePlaceholder": "",
+      "noteTitle": "",
+      "remove": "",
+      "sent": "",
+      "title_other": "",
+      "toggle": ""
+    },
+    "shot": {
+      "dismiss": "",
+      "failed": "",
+      "fullPage": "",
+      "menu": "",
+      "visible": "",
+      "withMarks": ""
+    },
+    "toolbar": {
+      "address": "",
+      "addressPlaceholder": "",
+      "back": "",
+      "close": "",
+      "devtools": "",
+      "forward": "",
+      "loading": "",
+      "openExternal": "",
+      "reload": "",
+      "stop": ""
+    },
+    "viewport": {
+      "apply": "",
+      "custom": "",
+      "height": "",
+      "menu": "",
+      "pixelRatio": "",
+      "reset": "",
+      "scaleToFit": "",
+      "width": ""
+    }
+  },
   "chat": {
     "activity": {
       "stalled": "模型已有 {{silent}} 没有回复。服务商可能较慢。",
@@ -163,6 +213,7 @@
       "viewSource": "查看源码"
     },
     "toolbar": {
+      "browser": "",
       "diffViewer": "差异查看器",
       "fileTree": "文件树",
       "reviewPanel": "审查面板",
