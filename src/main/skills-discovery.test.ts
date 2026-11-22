@@ -95,6 +95,27 @@ test('listSkills for Pi sees only Pi and .agents roots, recursively', async () =
   })
 })
 
+test('listSkills for Pi does not scan inside skill directories', async () => {
+  const base = await mkdtemp(join(tmpdir(), 'skills-discovery-'))
+  try {
+    const root = join(base, 'home', '.agents', 'skills')
+    await writeSkill(root, 'foo')
+    await mkdir(join(root, 'foo', 'references'), { recursive: true })
+    await writeFile(join(root, 'foo', 'references', 'bar.md'), skillMd('bar'), 'utf-8')
+    await writeFile(join(root, 'solto.md'), skillMd('solto'), 'utf-8')
+    await writeSkill(join(root, 'grupo'), 'sub')
+    await mkdir(join(root, 'grupo'), { recursive: true })
+    await writeFile(join(root, 'grupo', 'ignorado.md'), skillMd('ignorado'), 'utf-8')
+    await writeSkill(join(root, 'node_modules'), 'dep')
+    await writeSkill(join(root, '.hidden'), 'oculta')
+
+    const skills = await listSkills(join(base, 'proj'), 'pi', join(base, 'home'))
+    assert.deepEqual(names(skills), ['foo', 'solto', 'sub'])
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
 test('listSkills for OMP sees .omp, .claude and .agents roots, one level deep', async () => {
   await withSkillTree(async (home, cwd) => {
     const skills = await listSkills(cwd, 'omp', home)

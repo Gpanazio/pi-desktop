@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'fs/promises'
+import { readdir, readFile, stat } from 'fs/promises'
 import { extname, join } from 'path'
 import { existsSync } from 'fs'
 import { RPC_SKILL_PATH_PREFIX, isRpcSkillPath, type InstalledSkill } from '../shared/ipc-contracts'
@@ -13,7 +13,8 @@ import { skillDisplayName } from '../shared/pi-command'
  *
  *  - Pi reads `~/.pi/agent/skills`, `~/.agents/skills` and the project's
  *    `.pi/skills` / `.agents/skills`, recursively, including bare root
- *    `<name>.md` files.
+ *    `<name>.md` files. A directory holding `SKILL.md` is a skill root and is
+ *    not scanned further; subfolders contribute only `SKILL.md`.
  *  - OMP reads its native `.omp` roots plus Claude Code and `.agents` roots,
  *    one directory level deep (`<root>/<skill>/SKILL.md` only — OMP does not
  *    discover nested skill groups or bare root markdown files).
@@ -106,29 +107,49 @@ async function collectSkills(
   dir: string,
   skills: InstalledSkill[],
   source: 'global' | 'project',
-  options: CollectOptions
+  options: CollectOptions,
+  isRoot = true
 ): Promise<void> {
   try {
     if (!existsSync(dir)) return
 
     const items = await readdir(dir, { withFileTypes: true })
 
+    // Pi treats a directory holding SKILL.md as a skill root and never looks
+    // inside it, so `references/*.md` and the like are not skills.
+    if (options.recursive && items.some((item) => item.name === 'SKILL.md')) {
+      await pushSkillFile(join(dir, 'SKILL.md'), skills, source)
+      return
+    }
+
     for (const item of items) {
       const fullPath = join(dir, item.name)
+      let isFile = item.isFile()
+      let isDirectory = item.isDirectory()
+      if (item.isSymbolicLink()) {
+        try {
+          const stats = await stat(fullPath)
+          isFile = stats.isFile()
+          isDirectory = stats.isDirectory()
+        } catch {
+          continue
+        }
+      }
 
-      if (item.isFile() && item.name.endsWith('.md') && item.name !== 'SKILL.md') {
-        if (!options.rootMdFiles) continue
-        // Root .md file as individual skill
+      if (isFile && item.name.endsWith('.md') && item.name !== 'SKILL.md') {
+        // Bare .md skills count only directly under the skills root
+        if (!options.rootMdFiles || !isRoot) continue
         await pushSkillFile(fullPath, skills, source)
-      } else if (item.isDirectory()) {
+      } else if (isDirectory) {
+        if (options.recursive) {
+          if (item.name.startsWith('.') || item.name === 'node_modules') continue
+          await collectSkills(fullPath, skills, source, options, false)
+          continue
+        }
         // Directory with SKILL.md
         const skillFile = join(fullPath, 'SKILL.md')
         if (existsSync(skillFile)) {
           await pushSkillFile(skillFile, skills, source)
-        }
-
-        if (options.recursive) {
-          await collectSkills(fullPath, skills, source, options)
         }
       }
     }
