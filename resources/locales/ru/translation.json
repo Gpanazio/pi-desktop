@@ -39,6 +39,7 @@
       "clear": "",
       "editNote": "",
       "hint": "",
+      "iframe_denied": "Нельзя отмечать внутри этого фрейма. Отметьте сам фрейм.",
       "noteHint": "",
       "notePlaceholder": "",
       "noteTitle": "",
@@ -49,6 +50,17 @@
       "title_many": "",
       "title_other": "",
       "toggle": ""
+    },
+    "permission": {
+      "allow": "Разрешить",
+      "block": "Заблокировать",
+      "message": "{{origin}} запрашивает доступ: {{what}}.",
+      "remember": "Запомнить выбор для этого сайта",
+      "what_camera": "камера",
+      "what_camera_microphone": "камера и микрофон",
+      "what_clipboard": "буфер обмена",
+      "what_location": "местоположение",
+      "what_microphone": "микрофон"
     },
     "shot": {
       "dismiss": "",

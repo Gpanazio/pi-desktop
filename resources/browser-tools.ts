@@ -57,7 +57,7 @@ export const BROWSER_TOOLS: readonly BrowserToolSpec[] = [
     name: 'browser_screenshot',
     label: 'Browser: screenshot',
     action: 'screenshot',
-    description: 'See the page: returns an image of the browser panel. Use it to judge layout, colors and visual bugs. withMarks draws the elements the user marked.',
+    description: 'See the page: returns an image of the browser panel. Use it to judge layout, colors and visual bugs. withMarks draws the elements the user marked, numbered as the user sees them. The text reports the viewport in CSS px and the image-px-per-CSS-px ratio: browser_click x/y are CSS px, so divide positions read off the image by that ratio.',
     parameters: object({
       fullPage: { type: 'boolean', description: 'Capture the top of the scrollable page as up to 4 tiles, 1280 px wide, instead of the visible part. For a longer page, scroll and take more screenshots.' },
       withMarks: { type: 'boolean', description: 'Outline and number the elements the user marked in the panel.' },
@@ -70,8 +70,8 @@ export const BROWSER_TOOLS: readonly BrowserToolSpec[] = [
     description: 'Click an element by ref or selector, or a point by x and y (CSS pixels in the viewport). Waits for a resulting page load.',
     parameters: object({
       ...refOrSelector,
-      x: { type: 'number', description: 'Viewport x, when clicking a point.' },
-      y: { type: 'number', description: 'Viewport y, when clicking a point.' },
+      x: { type: 'number', description: 'x in CSS px of the viewport (not image px of a screenshot), when clicking a point.' },
+      y: { type: 'number', description: 'y in CSS px of the viewport (not image px of a screenshot), when clicking a point.' },
       button: { type: 'string', enum: ['left', 'right', 'middle'], description: 'Mouse button (default left).' },
       clickCount: { type: 'integer', description: '2 for a double click (default 1).' },
     }),
@@ -95,7 +95,7 @@ export const BROWSER_TOOLS: readonly BrowserToolSpec[] = [
     name: 'browser_press',
     label: 'Browser: press key',
     action: 'press',
-    description: 'Press a key or combination: Enter, Tab, Escape, ArrowDown, Backspace, F5, a letter, or something like Control+a or Shift+Tab.',
+    description: 'Press a key or combination: Enter, Tab, Escape, ArrowDown, Backspace, a letter, a shifted character such as "A" or "!", or a combination like Meta+a (select all on macOS) or Shift+Tab. To reload, use browser_reload.',
     parameters: object({ key: { type: 'string', description: 'The key, with optional modifiers joined by +.' } }, ['key']),
   },
   {

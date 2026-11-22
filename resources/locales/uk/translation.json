@@ -39,6 +39,7 @@
       "clear": "",
       "editNote": "",
       "hint": "",
+      "iframe_denied": "Не можна позначати всередині цього фрейму. Позначте сам фрейм.",
       "noteHint": "",
       "notePlaceholder": "",
       "noteTitle": "",
@@ -49,6 +50,17 @@
       "title_many": "",
       "title_other": "",
       "toggle": ""
+    },
+    "permission": {
+      "allow": "Дозволити",
+      "block": "Заблокувати",
+      "message": "{{origin}} запитує доступ: {{what}}.",
+      "remember": "Запам’ятати вибір для цього сайту",
+      "what_camera": "камера",
+      "what_camera_microphone": "камера і мікрофон",
+      "what_clipboard": "буфер обміну",
+      "what_location": "місцезнаходження",
+      "what_microphone": "мікрофон"
     },
     "shot": {
       "dismiss": "",

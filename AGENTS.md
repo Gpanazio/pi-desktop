@@ -108,7 +108,7 @@ src/
 │   ├── session-trash.ts          # Deleted sessions go to the desktop trash (trash-cli, then gio)
 │   ├── path-authorization.ts     # Path containment checks (attachment/session IPC)
 │   ├── renderer-origin.ts        # Trusted-renderer URL check (navigation + IPC sender)
-│   ├── browser/                  # Browser panel guest (`persist:pi-browser`): controller (getBrowser/onBrowserChange, CDP, marks, console), guest rules, Chrome user agent, session wiring; `browser-actions.ts` (the agent's actions: accessibility snapshot with refs, click/type/press, eval) and `browser-bridge.ts` (loopback HTTP server, bearer token, Host/Origin checks) serve the agent's browser tools
+│   ├── browser/                  # Browser panel guest (`persist:pi-browser`): controller (getBrowser/onBrowserChange, CDP, marks, console), guest rules, Chrome user agent, session wiring; `browser-permissions.ts` (camera/microphone, location and clipboard read ask once per origin, decisions kept in `browser-permissions.json` in the GUI data dir; notifications, fullscreen and sanitized clipboard write are always on); `browser-actions.ts` (the agent's actions: accessibility snapshot with refs, click/type/press, eval) and `browser-bridge.ts` (loopback HTTP server, bearer token, Host/Origin checks) serve the agent's browser tools
 │   ├── preview-guest.ts          # File-preview guest rules: which guest is the PDF preview, scripts, per-partition request block
 │   ├── window-background.ts      # Native window background that follows the theme
 │   ├── workspace-trust.ts        # Per-workspace trust registry (gates allow rules + preview)

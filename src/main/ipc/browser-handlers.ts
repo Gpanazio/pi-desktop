@@ -1,5 +1,5 @@
 import { ipcMain, session, webContents, type IpcMainInvokeEvent } from 'electron'
-import { BROWSER_PARTITION, clampViewport, type BrowserMarkDraft, type BrowserScreenshotOptions, type BrowserViewport } from '../../shared/browser'
+import { BROWSER_PARTITION, SCREENSHOT_MAX_DIMENSION_LIMIT, clampViewport, validMaxDimension, type BrowserMarkDraft, type BrowserScreenshotOptions, type BrowserViewport } from '../../shared/browser'
 import { IPC_CHANNELS, type BrowserMarksEvent, type BrowserStateEvent } from '../../shared/ipc-contracts'
 import { getMarkStore, onMarkPick, onMarksChange } from '../browser/browser-mark-store'
 import { getBrowser, onBrowserChange, registerBrowser, setBrowserPaneSize, unregisterBrowser } from '../browser/browser-controller'
@@ -34,14 +34,20 @@ function parseViewport(value: unknown): BrowserViewport | null {
   })
 }
 
-function parseScreenshotOptions(value: unknown): BrowserScreenshotOptions & { maxDimension?: number } {
+function parseMaxDimension(value: unknown): number {
+  const valid = validMaxDimension(value)
+  if (valid === undefined) throw new Error(`maxDimension must be a number above 0 and at most ${SCREENSHOT_MAX_DIMENSION_LIMIT}`)
+  return valid
+}
+
+export function parseScreenshotOptions(value: unknown): BrowserScreenshotOptions & { maxDimension?: number } {
   if (value === undefined || value === null) return {}
   if (!isObject(value)) throw new Error('screenshot options must be an object')
   return {
     ...(typeof value.fullPage === 'boolean' && { fullPage: value.fullPage }),
     ...((value.format === 'png' || value.format === 'jpeg' || value.format === 'auto') && { format: value.format }),
     ...(typeof value.quality === 'number' && { quality: value.quality }),
-    ...(typeof value.maxDimension === 'number' && { maxDimension: value.maxDimension }),
+    ...(value.maxDimension !== undefined && { maxDimension: parseMaxDimension(value.maxDimension) }),
   }
 }
 

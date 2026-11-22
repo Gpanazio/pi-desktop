@@ -36,6 +36,7 @@
       "clear": "",
       "editNote": "",
       "hint": "",
+      "iframe_denied": "无法在此框架内标记。请标记框架本身。",
       "noteHint": "",
       "notePlaceholder": "",
       "noteTitle": "",
@@ -43,6 +44,17 @@
       "sent": "",
       "title_other": "",
       "toggle": ""
+    },
+    "permission": {
+      "allow": "允许",
+      "block": "阻止",
+      "message": "{{origin}} 想使用你的{{what}}。",
+      "remember": "记住我对此网站的选择",
+      "what_camera": "摄像头",
+      "what_camera_microphone": "摄像头和麦克风",
+      "what_clipboard": "剪贴板",
+      "what_location": "位置",
+      "what_microphone": "麦克风"
     },
     "shot": {
       "dismiss": "",

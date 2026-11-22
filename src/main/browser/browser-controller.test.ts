@@ -529,6 +529,15 @@ test('rekeying a browser moves the live guest, its marks and its state to the ru
   unregisterBrowser(to)
 })
 
+test('marks move to the new key even when the panel is closed', () => {
+  const from = key()
+  const to = key()
+  const mark = getMarkStore(from).add({ selector: 'h1', text: 'Hi', html: '<h1>Hi</h1>', rect: { x: 1, y: 2, width: 3, height: 4 }, url: 'https://example.com/' })
+  assert.equal(rekeyBrowser(from, to), false, 'no guest moved')
+  assert.deepEqual(getMarkStore(to).list().map((m) => m.id), [mark.id])
+  assert.deepEqual(getMarkStore(from).list(), [])
+})
+
 test('rekeying does nothing when the source has no browser or the target already has one', async () => {
   const a = key()
   const b = key()

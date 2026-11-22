@@ -10,6 +10,7 @@ import {
   type BrowserMark,
   type BrowserViewport,
 } from '../../shared/browser'
+import { numberedMarks, type NumberedMark } from '../../shared/browser-marks'
 import type { BrowserHandle } from './browser-controller'
 
 export interface ActionResult {
@@ -27,13 +28,18 @@ export type ActionHandle = Pick<
   BrowserHandle,
   'getState' | 'navigate' | 'goBack' | 'goForward' | 'reload' | 'setViewport' | 'screenshot' | 'cdp' | 'getMarks' | 'getConsole'
 > & {
-  /** The guest, when there is one to give keyboard focus to. */
-  webContents?: { focus(): void }
+  /** The guest, when there is one to give keyboard focus to; its embedder gets the focus back when the panel is hidden. */
+  webContents?: { focus(): void; hostWebContents?: { focus(): void } | null }
+  /** False while the panel is hidden in the pool; a missing method counts as visible. */
+  isVisible?(): boolean
 }
 
 export interface ActionEnv {
   sleep(ms: number): Promise<void>
   now(): number
+  /** Tests shorten the limits; the defaults are ACTION_TIMEOUT_MS and EVAL_TIMEOUT_MS. */
+  actionTimeoutMs?: number
+  evalTimeoutMs?: number
 }
 
 const realEnv: ActionEnv = {
@@ -64,6 +70,11 @@ export const SETTLE_MAX_MS = 3000
 export const WAIT_DEFAULT_TIMEOUT_MS = 10_000
 export const WAIT_MAX_TIMEOUT_MS = 60_000
 export const EVAL_MAX_BYTES = 8 * 1024
+/** One action's limit: past it the action answers with an error and the session's queue moves on. */
+export const ACTION_TIMEOUT_MS = 30_000
+/** `wait` runs for its own timeout; the limit is that plus this. */
+export const WAIT_TIMEOUT_GRACE_MS = 5_000
+export const EVAL_TIMEOUT_MS = 20_000
 export const SCREENSHOT_MAX_DIMENSION = 1600
 export const SCREENSHOT_JPEG_QUALITY = 80
 /** A full-page capture for the agent: this wide at most, cut into tiles this tall at most, this many at most. */
@@ -274,6 +285,8 @@ export interface KeySpec {
   modifiers: number
   /** The character the key types, when it types one. */
   text?: string
+  /** Editing commands macOS runs for a shortcut such as Meta+a; a synthetic key event does not trigger them by itself. */
+  commands?: string[]
 }
 
 interface NamedKey {
@@ -350,8 +363,17 @@ const PUNCTUATION: Record<string, [string, number, string]> = {
 }
 const SHIFTED_PUNCTUATION = new Map(Object.entries(PUNCTUATION).map(([char, [code, vk, shifted]]) => [shifted, { char, code, vk }]))
 
-/** "Enter", "Control+a", "Shift+Tab", "Meta+Shift+ArrowLeft" -> the fields Input.dispatchKeyEvent needs. */
-export function parseKey(input: string): KeySpec {
+// Shifted digits on a US layout: character -> digit.
+const SHIFTED_DIGITS = new Map(Object.entries({ ')': 0, '!': 1, '@': 2, '#': 3, $: 4, '%': 5, '^': 6, '&': 7, '*': 8, '(': 9 }))
+
+const MAC_EDIT_COMMANDS: Record<string, string> = { a: 'selectAll', c: 'copy', v: 'paste', x: 'cut', z: 'undo' }
+
+/**
+ * "Enter", "Control+a", "Shift+Tab", "Meta+Shift+ArrowLeft", "A", "!" -> the fields Input.dispatchKeyEvent needs.
+ * A capital letter or a shifted symbol carries Shift by itself. On macOS, Meta+a/c/v/x/z (and Control+) add the
+ * editing `commands`, because the page only sees them from the native menu path.
+ */
+export function parseKey(input: string, platform: string = process.platform): KeySpec {
   const combo = input.trim()
   if (combo === '') throw new Error('key is empty')
   let head: string
@@ -377,7 +399,7 @@ export function parseKey(input: string): KeySpec {
     if (!modifier) throw new Error(`Unknown modifier "${part}" in key "${input}"`)
     modifiers |= MODIFIER_FLAGS[modifier]
   }
-  const shift = (modifiers & MODIFIER_FLAGS.Shift) !== 0
+  let shift = (modifiers & MODIFIER_FLAGS.Shift) !== 0
   const commandHeld = (modifiers & (MODIFIER_FLAGS.Control | MODIFIER_FLAGS.Alt | MODIFIER_FLAGS.Meta)) !== 0
 
   const lower = last.toLowerCase()
@@ -398,8 +420,25 @@ export function parseKey(input: string): KeySpec {
   if (last.length === 1) {
     if (/[a-z]/i.test(last)) {
       const upper = last.toUpperCase()
+      if (last === upper && !commandHeld) {
+        shift = true
+        modifiers |= MODIFIER_FLAGS.Shift
+      }
       const character = shift ? upper : last.toLowerCase()
-      return { key: character, code: `Key${upper}`, windowsVirtualKeyCode: upper.charCodeAt(0), modifiers, ...(commandHeld ? {} : { text: character }) }
+      const command =
+        platform === 'darwin' && (modifiers === MODIFIER_FLAGS.Meta || modifiers === MODIFIER_FLAGS.Control) ? MAC_EDIT_COMMANDS[last.toLowerCase()] : undefined
+      return {
+        key: character,
+        code: `Key${upper}`,
+        windowsVirtualKeyCode: upper.charCodeAt(0),
+        modifiers,
+        ...(commandHeld ? {} : { text: character }),
+        ...(command ? { commands: [command] } : {}),
+      }
+    }
+    const shiftedDigit = SHIFTED_DIGITS.get(last)
+    if (shiftedDigit !== undefined) {
+      return { key: last, code: `Digit${shiftedDigit}`, windowsVirtualKeyCode: 48 + shiftedDigit, modifiers: modifiers | MODIFIER_FLAGS.Shift, ...(commandHeld ? {} : { text: last }) }
     }
     if (/[0-9]/.test(last)) {
       return { key: last, code: `Digit${last}`, windowsVirtualKeyCode: 48 + Number(last), modifiers, ...(commandHeld ? {} : { text: last }) }
@@ -414,7 +453,7 @@ export function parseKey(input: string): KeySpec {
       return { key: last, code: shifted.code, windowsVirtualKeyCode: shifted.vk, modifiers: modifiers | MODIFIER_FLAGS.Shift, ...(commandHeld ? {} : { text: last }) }
     }
   }
-  throw new Error(`Unknown key "${last}". Use a name like Enter, Tab, Escape, ArrowDown, Backspace, F5, a single character, or a combination like Control+a.`)
+  throw new Error(`Unknown key "${last}". Use a name like Enter, Tab, Escape, ArrowDown, Backspace, F1 to F12, a single character, or a combination like Control+a.`)
 }
 
 // ─── Per-handle state ────────────────────────────────────────────────────────
@@ -427,10 +466,16 @@ interface RefState {
 /** Keyed by handle: a closed and reopened panel is a new handle, so its refs start empty. */
 const refStates = new WeakMap<object, RefState>()
 
+/** A #hash change keeps the document, so the refs of the snapshot stay valid. */
+function withoutFragment(url: string): string {
+  const cut = url.indexOf('#')
+  return cut === -1 ? url : url.slice(0, cut)
+}
+
 /** The refs of the last snapshot, or null when the page changed since (or there was none). */
 export function currentRefs(handle: Pick<ActionHandle, 'getState'>): Map<string, number> | null {
   const state = refStates.get(handle)
-  if (!state || state.url !== handle.getState().url) return null
+  if (!state || withoutFragment(state.url) !== withoutFragment(handle.getState().url)) return null
   return state.refs
 }
 
@@ -455,7 +500,7 @@ function exceptionText(details: NonNullable<EvaluateResult['exceptionDetails']>)
 }
 
 async function evaluateValue<T>(handle: ActionHandle, expression: string): Promise<T> {
-  const response = await handle.cdp<EvaluateResult>('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
+  const response = await handle.cdp<EvaluateResult>('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, timeout: 10_000 })
   if (response.exceptionDetails) throw new Error(exceptionText(response.exceptionDetails))
   return response.result.value as T
 }
@@ -539,16 +584,28 @@ async function mouseClick(handle: ActionHandle, point: Point, button: MouseButto
  * focus: with the focus in the app's own composer, Input.insertText lands
  * there instead of in the page.
  */
-function focusGuest(handle: ActionHandle): void {
+async function withGuestFocus<T>(handle: ActionHandle, job: () => Promise<T>): Promise<T> {
+  // A panel that is hidden in the pool must not keep the keyboard: focus, act, and give the focus back to the app.
+  const hidden = handle.isVisible?.() === false
   try {
     handle.webContents?.focus()
   } catch {
     // A guest that is gone fails the CDP call that follows.
   }
+  try {
+    return await job()
+  } finally {
+    if (hidden) {
+      try {
+        handle.webContents?.hostWebContents?.focus()
+      } catch {
+        // The embedder is gone with the window.
+      }
+    }
+  }
 }
 
 async function pressKey(handle: ActionHandle, spec: KeySpec): Promise<void> {
-  focusGuest(handle)
   const base = {
     modifiers: spec.modifiers,
     key: spec.key,
@@ -560,6 +617,7 @@ async function pressKey(handle: ActionHandle, spec: KeySpec): Promise<void> {
     type: spec.text !== undefined ? 'keyDown' : 'rawKeyDown',
     ...base,
     ...(spec.text !== undefined ? { text: spec.text, unmodifiedText: spec.text } : {}),
+    ...(spec.commands ? { commands: spec.commands } : {}),
   })
   await handle.cdp('Input.dispatchKeyEvent', { type: 'keyUp', ...base })
 }
@@ -694,19 +752,20 @@ const actions: Record<ActionName, Action> = {
         maxDimension: SCREENSHOT_MAX_DIMENSION,
         ...(fullPage ? { tiles: { maxWidth: FULL_PAGE_MAX_WIDTH, maxTileHeight: FULL_PAGE_TILE_HEIGHT, maxTiles: FULL_PAGE_MAX_TILES } } : {}),
       })
-      const markNote = marks.length > 0 ? `\nMarked elements:\n${marks.map(markLine).join('\n')}` : ''
+      const markNote = marks.length > 0 ? `\nMarked elements:\n${numberedMarks(marks).map(markLine).join('\n')}` : ''
+      const css = await layoutViewport(handle).catch(() => null)
       if (fullPage && shot.tiles && shot.tiles.length > 0) {
         const [first, ...rest] = shot.tiles
         const covered = shot.coveredCssHeight ?? 0
         const total = shot.totalCssHeight ?? covered
         const rest2 = covered < total ? ` The page is ${total} px tall and was covered down to y=${covered}; use browser_scroll and browser_screenshot for the rest.` : ' The whole page is covered.'
-        const text = `Full-page screenshot in ${shot.tiles.length} tile${shot.tiles.length === 1 ? '' : 's'} (${first.width}px wide, top to bottom, up to ${FULL_PAGE_TILE_HEIGHT}px tall each), covering y=0 to y=${covered} CSS px.${rest2}${markNote}`
+        const text = `Full-page screenshot in ${shot.tiles.length} tile${shot.tiles.length === 1 ? '' : 's'} (${first.width}px wide, top to bottom, up to ${FULL_PAGE_TILE_HEIGHT}px tall each), covering y=0 to y=${covered} CSS px.${rest2}${coordinateNote(first.width, css ? Math.min(css.width, FULL_PAGE_MAX_WIDTH) : null, css)}${markNote}`
         return done(handle, text, {
           image: { mimeType: first.mimeType, data: first.data },
           ...(rest.length > 0 ? { images: rest.map((t) => ({ mimeType: t.mimeType, data: t.data })) } : {}),
         })
       }
-      return done(handle, `Screenshot ${shot.width}x${shot.height}${fullPage ? ' (full page)' : ''}.${markNote}`, {
+      return done(handle, `Screenshot ${shot.width}x${shot.height} image px${fullPage ? ' (full page)' : ''}.${coordinateNote(shot.width, css?.width ?? null, css)}${markNote}`, {
         image: { mimeType: shot.mimeType, data: shot.data },
       })
     } finally {
@@ -759,9 +818,10 @@ const actions: Record<ActionName, Action> = {
         await handle.cdp('Runtime.evaluate', { expression: `(${CLEAR_SCRIPT}).call(document.activeElement)` })
       }
     }
-    focusGuest(handle)
-    await typeText(handle, text)
-    if (bool(params, 'submit')) await pressKey(handle, parseKey('Enter'))
+    await withGuestFocus(handle, async () => {
+      await typeText(handle, text)
+      if (bool(params, 'submit')) await pressKey(handle, parseKey('Enter'))
+    })
     await settle(handle, env)
     return done(handle, `Typed ${JSON.stringify(clip(text, 80))}${bool(params, 'submit') ? ' and pressed Enter' : ''}.`)
   },
@@ -769,7 +829,8 @@ const actions: Record<ActionName, Action> = {
   async press(handle, params, env) {
     const key = str(params, 'key')
     if (!key) return fail(handle, 'press needs a key.')
-    await pressKey(handle, parseKey(key))
+    const spec = parseKey(key)
+    await withGuestFocus(handle, () => pressKey(handle, spec))
     await settle(handle, env)
     return done(handle, `Pressed ${key}.`)
   },
@@ -852,15 +913,21 @@ const actions: Record<ActionName, Action> = {
     return done(handle, `Viewport set to ${describeViewport(handle.getState().viewport, handle.getState().paneSize)}.`)
   },
 
-  async eval(handle, params) {
+  async eval(handle, params, env) {
     const expression = str(params, 'expression')
     if (!expression) return fail(handle, 'eval needs an expression.')
-    const response = await handle.cdp<EvaluateResult>('Runtime.evaluate', {
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
-      userGesture: true,
-    })
+    const limit = env.evalTimeoutMs ?? EVAL_TIMEOUT_MS
+    const response = await withTimeout(
+      handle.cdp<EvaluateResult>('Runtime.evaluate', {
+        expression,
+        returnByValue: true,
+        awaitPromise: true,
+        userGesture: true,
+        timeout: limit,
+      }),
+      limit,
+      `eval did not finish within ${Math.round(limit / 1000)} s (a Promise that never settles, or a loop that never ends). The page may need a reload.`,
+    )
     if (response.exceptionDetails) return fail(handle, truncateUtf8(`Error: ${exceptionText(response.exceptionDetails)}`, EVAL_MAX_BYTES))
     return done(handle, truncateUtf8(serializeRemote(response.result), EVAL_MAX_BYTES))
   },
@@ -879,14 +946,21 @@ const actions: Record<ActionName, Action> = {
   async get_marks(handle) {
     const marks = handle.getMarks()
     if (marks.length === 0) return done(handle, 'The user has not marked anything in the browser panel.')
-    return done(handle, `Elements the user marked in the browser panel:\n${marks.map(markLine).join('\n')}`)
+    return done(handle, `Elements the user marked in the browser panel:\n${numberedMarks(marks).map(markLine).join('\n')}`)
   },
 }
 
-function markLine(mark: BrowserMark): string {
+/** The image is in image px; browser_click x/y are CSS px. Say both and the ratio between them. */
+function coordinateNote(imageWidth: number, cssWidth: number | null, viewport: { width: number; height: number } | null): string {
+  const ratio = cssWidth && cssWidth > 0 ? Math.round((imageWidth / cssWidth) * 100) / 100 : null
+  const size = viewport ? `Viewport ${viewport.width}x${viewport.height} CSS px` : 'Viewport size unknown'
+  return `\n${size}${ratio !== null ? `; image px per CSS px = ${ratio}` : ''}. browser_click x and y are CSS px, not image px: divide image coordinates by the ratio.`
+}
+
+function markLine({ number, mark }: NumberedMark): string {
   const rect = mark.rect
   return [
-    `#${mark.id} ${mark.selector}`,
+    `#${number} ${mark.selector}`,
     mark.text ? ` text=${JSON.stringify(clip(mark.text, 120))}` : '',
     mark.note ? ` note=${JSON.stringify(clip(mark.note, 200))}` : '',
     ` rect=${Math.round(rect.x)},${Math.round(rect.y)} ${Math.round(rect.width)}x${Math.round(rect.height)}`,
@@ -926,7 +1000,7 @@ const REMOVE_MARKS_SCRIPT = `document.getElementById(${JSON.stringify(MARK_OVERL
 
 /** Draw each mark as a numbered box over the page for one capture. The element is found again by its selector. */
 async function drawMarks(handle: ActionHandle, marks: BrowserMark[]): Promise<void> {
-  const payload = JSON.stringify(marks.map((mark) => ({ id: mark.id, selector: mark.selector, rect: mark.rect })))
+  const payload = JSON.stringify(numberedMarks(marks).map(({ number, mark }) => ({ id: number, selector: mark.selector, rect: mark.rect })))
   const expression = `(() => {
     const old = document.getElementById(${JSON.stringify(MARK_OVERLAY_ID)}); if (old) old.remove()
     const layer = document.createElement('div')
@@ -965,6 +1039,21 @@ function serializeRemote(object: RemoteObject): string {
   return object.unserializableValue ?? object.description ?? object.type ?? 'undefined'
 }
 
+function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const limit = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms)
+  })
+  return Promise.race([work, limit]).finally(() => clearTimeout(timer))
+}
+
+function actionLimitMs(action: string, params: ActionParams, env: ActionEnv): number {
+  if (env.actionTimeoutMs !== undefined) return env.actionTimeoutMs
+  if (action !== 'wait') return ACTION_TIMEOUT_MS
+  const timeoutMs = Math.min(Math.max(num(params, 'timeoutMs') ?? WAIT_DEFAULT_TIMEOUT_MS, 100), WAIT_MAX_TIMEOUT_MS)
+  return timeoutMs + WAIT_TIMEOUT_GRACE_MS
+}
+
 /** Run one action. It never throws: a failure comes back as { ok: false, text }. */
 export async function runBrowserAction(
   handle: ActionHandle,
@@ -975,7 +1064,8 @@ export async function runBrowserAction(
   const run = (ACTION_NAMES as readonly string[]).includes(action) ? actions[action as ActionName] : undefined
   if (!run) return fail(handle, `Unknown browser action "${action}".`)
   try {
-    return await run(handle, params, env)
+    const limit = actionLimitMs(action, params, env)
+    return await withTimeout(run(handle, params, env), limit, `browser_${action} did not finish within ${Math.round(limit / 1000)} s; the page is not answering.`)
   } catch (error) {
     return fail(handle, error instanceof Error ? error.message : String(error))
   }

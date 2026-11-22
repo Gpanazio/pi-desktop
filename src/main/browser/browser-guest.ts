@@ -69,20 +69,6 @@ export function decideWindowOpen(details: { url: string; disposition: string }):
   return popup ? 'popup' : 'same-panel'
 }
 
-const ALLOWED_PERMISSIONS: ReadonlySet<string> = new Set([
-  'media',
-  'notifications',
-  'geolocation',
-  'clipboard-read',
-  'clipboard-sanitized-write',
-  'fullscreen',
-])
-
-/** Camera, microphone, notifications, location, clipboard and fullscreen are granted; the rest is refused. */
-export function isBrowserPermissionAllowed(permission: string): boolean {
-  return ALLOWED_PERMISSIONS.has(permission)
-}
-
 /** `name`, or `name (1)`, `name (2)` ... before the extension, the first one `exists` does not report. */
 export function uniqueDownloadName(name: string, exists: (candidate: string) => boolean): string {
   const safe = name.replace(/[\\/]/g, '_').replace(/^\.+/, '') || 'download'

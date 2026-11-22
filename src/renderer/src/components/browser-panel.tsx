@@ -131,6 +131,8 @@ export function BrowserPanel({ sessionKey, onClose }: { sessionKey: string; onCl
   useEffect(() => {
     return window.piDesktop.browser.onState((event) => {
       if (event.sessionKey !== sessionKey) return
+      // The guest died (render-process-gone unregisters it): the next dom-ready registers it again.
+      if (event.state === null) registeredRef.current = false
       setState(event.state)
       if (event.state && event.state.url !== '' && event.state.url !== 'about:blank') {
         useAppStore.getState().patchBrowserSession(sessionKey, { url: event.state.url })

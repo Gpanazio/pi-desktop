@@ -114,3 +114,21 @@ test('a rejected markSent does not surface', async () => {
   })
   await new Promise((resolve) => setImmediate(resolve))
 })
+
+test('a capture that never answers sends the marks as text only and warns', async () => {
+  const warnings: string[] = []
+  const { value } = deps([mark(1)], { captureWithMarks: () => new Promise(() => {}), timeoutMs: 20, warn: (text) => warnings.push(text) })
+  const result = await attachBrowserMarks('fix', undefined, value)
+  assert.ok(result.message.includes('<browser_marks'))
+  assert.equal(result.options, undefined)
+  assert.deepEqual(result.sentIds, [1])
+  assert.equal(warnings.length, 1)
+})
+
+test('marks that never load leave the prompt as written and warn', async () => {
+  const warnings: string[] = []
+  const { value } = deps([], { getMarks: () => new Promise(() => {}), timeoutMs: 20, warn: (text) => warnings.push(text) })
+  const result = await attachBrowserMarks('fix', undefined, value)
+  assert.deepEqual(result, { message: 'fix', options: undefined, sentIds: [] })
+  assert.equal(warnings.length, 1)
+})

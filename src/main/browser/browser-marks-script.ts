@@ -21,7 +21,8 @@ function piCssEscape(value) {
   return String(value).replace(/[^a-zA-Z0-9_¡-￿-]/g, function (c) { return '\\' + c; }).replace(/^(\d)/, '\\3$1 ');
 }
 function piAttrValue(value) {
-  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  // A ">" is escaped so a value holding " >>> " cannot be cut by the frame-chain split.
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/>/g, '\\3e ');
 }
 function piAnchorFor(el, isUnique) {
   var testid = el.getAttribute('data-testid');
@@ -36,7 +37,7 @@ function piAnchorFor(el, isUnique) {
   return null;
 }
 function piSegment(el) {
-  var tag = el.tagName.toLowerCase();
+  var tag = el.localName;
   var parent = el.parentElement;
   if (!parent) return tag;
   var siblings = parent.children;
@@ -51,7 +52,7 @@ function piSegment(el) {
   return same > 1 ? tag + ':nth-of-type(' + index + ')' : tag;
 }
 function piSelectorFor(el, isUnique) {
-  if (el.tagName.toLowerCase() === 'html') return 'html';
+  if (el.localName === 'html') return 'html';
   var own = piAnchorFor(el, isUnique);
   if (own) return own;
   var parts = [];
@@ -66,7 +67,7 @@ function piSelectorFor(el, isUnique) {
     }
     parts.unshift(piSegment(node));
     var joined = parts.join(' > ');
-    var tag = node.tagName.toLowerCase();
+    var tag = node.localName;
     if (tag === 'html' || tag === 'body' || isUnique(joined)) return joined;
     node = node.parentElement;
   }
@@ -88,8 +89,14 @@ var root = null;
 var hoverBox = null;
 var hoverLabel = null;
 var badgeLayer = null;
+var shieldLayer = null;
+var shields = [];
+var noticeBox = null;
+var noticeText = '';
+var noticeTimer = null;
 var cursorStyle = null;
 var timer = null;
+var shieldTimer = null;
 var frame = 0;
 var cache = {};
 
@@ -120,13 +127,27 @@ function frameChain() {
   } catch (e) {}
   return chain;
 }
+// A cross-origin parent hides frameElement: the chain then stops short of the top.
+function chainComplete(chain) {
+  var depth = 0;
+  for (var w = window; w !== w.parent; w = w.parent) depth++;
+  return chain.length === depth;
+}
+function contentOrigin(frameEl) {
+  var r = frameEl.getBoundingClientRect();
+  var cs = getComputedStyle(frameEl);
+  return {
+    x: r.left + frameEl.clientLeft + (parseFloat(cs.paddingLeft) || 0),
+    y: r.top + frameEl.clientTop + (parseFloat(cs.paddingTop) || 0)
+  };
+}
 function frameOffset() {
   var x = 0, y = 0;
   var chain = frameChain();
   for (var i = 0; i < chain.length; i++) {
-    var r = chain[i].el.getBoundingClientRect();
-    x += r.left + chain[i].el.clientLeft;
-    y += r.top + chain[i].el.clientTop;
+    var o = contentOrigin(chain[i].el);
+    x += o.x;
+    y += o.y;
   }
   return { x: x, y: y };
 }
@@ -143,9 +164,9 @@ function resolve(selector) {
     for (var i = 0; i < parts.length - 1; i++) {
       var f = doc.querySelector(parts[i]);
       if (!f || !f.contentDocument) return null;
-      var fr = f.getBoundingClientRect();
-      offX += fr.left + f.clientLeft;
-      offY += fr.top + f.clientTop;
+      var fo = contentOrigin(f);
+      offX += fo.x;
+      offY += fo.y;
       doc = f.contentDocument;
     }
     var el = doc.querySelector(parts[parts.length - 1]);
@@ -165,21 +186,26 @@ function ensureHost() {
   hoverLabel = document.createElement('div');
   hoverLabel.style.cssText = 'position:fixed;display:none;padding:2px 6px;border-radius:4px;background:' + HIGHLIGHT + ';color:#fff;font:600 11px/1.4 ui-monospace,Menlo,monospace;white-space:nowrap;pointer-events:none;';
   badgeLayer = document.createElement('div');
+  shieldLayer = document.createElement('div');
+  noticeBox = document.createElement('div');
+  noticeBox.style.cssText = 'position:fixed;display:none;left:50%;bottom:16px;transform:translateX(-50%);max-width:80vw;padding:6px 12px;border-radius:6px;background:#111827;color:#fff;font:500 12px/1.4 system-ui,sans-serif;pointer-events:none;';
   root.appendChild(badgeLayer);
+  root.appendChild(shieldLayer);
+  root.appendChild(noticeBox);
   root.appendChild(hoverBox);
   root.appendChild(hoverLabel);
   (document.documentElement || document).appendChild(host);
   host.style.display = hidden ? 'none' : '';
 }
 function describe(el, rect) {
-  var label = el.tagName.toLowerCase();
+  var label = el.localName;
   if (el.id) label += '#' + el.id;
   else if (typeof el.className === 'string' && el.className.trim() !== '') label += '.' + el.className.trim().split(/\s+/)[0];
   return label + '  ' + Math.round(rect.width) + '×' + Math.round(rect.height);
 }
 function showHover(el) {
   ensureHost();
-  if (!el || el.tagName === 'IFRAME' || el.tagName === 'FRAME') { hoverBox.style.display = 'none'; hoverLabel.style.display = 'none'; return; }
+  if (!el || ((el.localName === 'iframe' || el.localName === 'frame') && !isForeignFrame(el))) { hoverBox.style.display = 'none'; hoverLabel.style.display = 'none'; return; }
   var r = el.getBoundingClientRect();
   hoverBox.style.cssText = 'position:fixed;display:block;box-sizing:border-box;border:2px solid ' + HIGHLIGHT + ';background:rgba(59,130,246,0.14);pointer-events:none;left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px;';
   hoverLabel.textContent = describe(el, r);
@@ -192,9 +218,50 @@ function hideHover() {
   if (hoverBox) hoverBox.style.display = 'none';
   if (hoverLabel) hoverLabel.style.display = 'none';
 }
+function isForeignFrame(el) {
+  if (!el || (el.localName !== 'iframe' && el.localName !== 'frame')) return false;
+  try { return !el.contentDocument; } catch (e) { return true; }
+}
+// A frame this page cannot read gets a transparent shield: a click on it marks the whole frame
+// and never reaches the frame's own page.
+function refreshShields() {
+  if (!mode) return;
+  ensureHost();
+  var frames = document.querySelectorAll('iframe,frame');
+  var next = [];
+  for (var i = 0; i < frames.length; i++) {
+    if (isForeignFrame(frames[i])) next.push(frames[i]);
+  }
+  while (shieldLayer.firstChild) shieldLayer.removeChild(shieldLayer.firstChild);
+  shields = [];
+  for (var j = 0; j < next.length; j++) {
+    var r = next[j].getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) continue;
+    var shield = document.createElement('div');
+    shield.style.cssText = 'position:fixed;pointer-events:auto;background:transparent;cursor:crosshair;left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px;';
+    shieldLayer.appendChild(shield);
+    shields.push({ el: next[j], rect: r });
+  }
+}
+function shieldAt(x, y) {
+  for (var i = shields.length - 1; i >= 0; i--) {
+    var r = shields[i].rect;
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return shields[i].el;
+  }
+  return null;
+}
+function showNotice() {
+  if (!noticeText) return;
+  ensureHost();
+  noticeBox.textContent = noticeText;
+  noticeBox.style.display = 'block';
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(function () { noticeBox.style.display = 'none'; }, 3500);
+}
 function targetAt(e) {
   var el = document.elementFromPoint(e.clientX, e.clientY);
-  return el && el !== host ? el : null;
+  if (el === host) return shieldAt(e.clientX, e.clientY);
+  return el;
 }
 function collapse(text, max) {
   var flat = String(text || '').replace(/\s+/g, ' ').trim();
@@ -203,6 +270,7 @@ function collapse(text, max) {
 function pick(e) {
   var el = targetAt(e);
   if (!el) return;
+  if (!chainComplete(frameChain())) { showNotice(); return; }
   var r = el.getBoundingClientRect();
   var off = frameOffset();
   send({
@@ -219,7 +287,7 @@ function pick(e) {
 }
 function editable(el) {
   if (!el || !el.tagName) return false;
-  var tag = el.tagName.toLowerCase();
+  var tag = el.localName;
   return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable === true;
 }
 var BLOCKED = ['mousedown', 'mouseup', 'pointerdown', 'pointerup', 'click', 'dblclick', 'auxclick', 'contextmenu', 'touchstart', 'touchend'];
@@ -233,6 +301,7 @@ function onBlocked(e) {
 }
 function onMove(e) {
   if (!mode) return;
+  refreshShields();
   showHover(targetAt(e));
 }
 function onKey(e) {
@@ -286,6 +355,8 @@ function scheduleLayout() {
 function applyMode() {
   if (mode) {
     ensureHost();
+    refreshShields();
+    if (!shieldTimer) shieldTimer = setInterval(refreshShields, 400);
     if (!cursorStyle) {
       cursorStyle = document.createElement('style');
       cursorStyle.textContent = '*{cursor:crosshair !important}';
@@ -293,6 +364,9 @@ function applyMode() {
     }
   } else {
     hideHover();
+    if (shieldTimer) { clearInterval(shieldTimer); shieldTimer = null; }
+    shields = [];
+    if (shieldLayer) while (shieldLayer.firstChild) shieldLayer.removeChild(shieldLayer.firstChild);
     if (cursorStyle) { cursorStyle.remove(); cursorStyle = null; }
   }
 }
@@ -312,13 +386,14 @@ function applyBadges() {
 BLOCKED.forEach(function (type) { window.addEventListener(type, onBlocked, true); });
 window.addEventListener('mousemove', onMove, true);
 window.addEventListener('keydown', onKey, true);
-window.addEventListener('scroll', scheduleLayout, true);
-window.addEventListener('resize', scheduleLayout, true);
+window.addEventListener('scroll', function () { scheduleLayout(); refreshShields(); }, true);
+window.addEventListener('resize', function () { scheduleLayout(); refreshShields(); }, true);
 document.addEventListener('mouseleave', hideHover, true);
 
 window.__piMarksApi = {
   setState: function (state) {
     mode = !!state.mode;
+    noticeText = typeof state.notice === 'string' ? state.notice : '';
     badges = state.badges || [];
     applyMode();
     applyBadges();

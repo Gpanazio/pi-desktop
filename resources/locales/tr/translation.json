@@ -37,6 +37,7 @@
       "clear": "",
       "editNote": "",
       "hint": "",
+      "iframe_denied": "Bu çerçevenin içinde işaretleme yapılamaz. Çerçevenin kendisini işaretleyin.",
       "noteHint": "",
       "notePlaceholder": "",
       "noteTitle": "",
@@ -45,6 +46,17 @@
       "title_one": "",
       "title_other": "",
       "toggle": ""
+    },
+    "permission": {
+      "allow": "İzin ver",
+      "block": "Engelle",
+      "message": "{{origin}} şunu kullanmak istiyor: {{what}}.",
+      "remember": "Bu site için seçimimi hatırla",
+      "what_camera": "kamera",
+      "what_camera_microphone": "kamera ve mikrofon",
+      "what_clipboard": "pano",
+      "what_location": "konum",
+      "what_microphone": "mikrofon"
     },
     "shot": {
       "dismiss": "",

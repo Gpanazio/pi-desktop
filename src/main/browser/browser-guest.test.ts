@@ -6,7 +6,6 @@ import {
   applyBrowserGuestPreferences,
   decideWindowOpen,
   isBrowserGuestSrcAllowed,
-  isBrowserPermissionAllowed,
   shouldBlockGuestNavigation,
   uniqueDownloadName,
   webviewGuestKind,
@@ -66,15 +65,6 @@ test('a popup with window features opens as a real window, a plain open loads in
   assert.equal(decideWindowOpen({ url: 'about:blank', disposition: 'foreground-tab' }), 'deny')
   assert.equal(decideWindowOpen({ url: 'file:///etc/passwd', disposition: 'new-window' }), 'deny')
   assert.equal(decideWindowOpen({ url: 'javascript:alert(1)', disposition: 'foreground-tab' }), 'deny')
-})
-
-test('camera, microphone, notifications, location, clipboard and fullscreen are granted; the rest is not', () => {
-  for (const permission of ['media', 'notifications', 'geolocation', 'clipboard-read', 'clipboard-sanitized-write', 'fullscreen']) {
-    assert.equal(isBrowserPermissionAllowed(permission), true, permission)
-  }
-  for (const permission of ['openExternal', 'usb', 'hid', 'serial', 'midiSysex', 'unknown']) {
-    assert.equal(isBrowserPermissionAllowed(permission), false, permission)
-  }
 })
 
 test('a download never overwrites a file in Downloads', () => {

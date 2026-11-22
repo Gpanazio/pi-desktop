@@ -79,6 +79,14 @@ export interface ConsoleEntry {
   ts: number
 }
 
+/** Longest side a screenshot may be asked to have, in px. */
+export const SCREENSHOT_MAX_DIMENSION_LIMIT = 16384
+
+/** `maxDimension` when it is a finite number in (0, 16384]; otherwise undefined (no usable cap was asked). */
+export function validMaxDimension(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= SCREENSHOT_MAX_DIMENSION_LIMIT ? value : undefined
+}
+
 export interface BrowserScreenshotOptions {
   fullPage?: boolean
   /** 'auto': PNG while the image that comes back is small and light, JPEG otherwise. */

@@ -37,6 +37,7 @@
       "clear": "Clear all",
       "editNote": "Edit note",
       "hint": "Click an element to mark it · Shift+click marks several · Esc exits",
+      "iframe_denied": "Can't mark inside this frame. Mark the frame itself.",
       "noteHint": "Enter to confirm · Esc to cancel",
       "notePlaceholder": "Note (optional)",
       "noteTitle": "Note for the mark",
@@ -45,6 +46,17 @@
       "title_one": "Marks ({{count}})",
       "title_other": "Marks ({{count}})",
       "toggle": "Mark elements (M)"
+    },
+    "permission": {
+      "allow": "Allow",
+      "block": "Block",
+      "message": "{{origin}} wants to use your {{what}}.",
+      "remember": "Remember my choice for this site",
+      "what_camera": "camera",
+      "what_camera_microphone": "camera and microphone",
+      "what_clipboard": "clipboard",
+      "what_location": "location",
+      "what_microphone": "microphone"
     },
     "shot": {
       "dismiss": "Dismiss",

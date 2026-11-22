@@ -38,10 +38,24 @@ class FakeHandle implements ActionHandle {
   screenshotCalls: Array<Parameters<BrowserHandle['screenshot']>[0]> = []
   paneSize = { width: 900, height: 700 }
   focused = 0
+  hostFocused = 0
+  visible = true
+  /** Order of the focus moves and key events, to prove the focus comes back after the keys. */
+  trail: string[] = []
   webContents = {
     focus: () => {
       this.focused += 1
+      this.trail.push('guest-focus')
     },
+    hostWebContents: {
+      focus: () => {
+        this.hostFocused += 1
+        this.trail.push('host-focus')
+      },
+    },
+  }
+  isVisible(): boolean {
+    return this.visible
   }
 
   getState(): BrowserState {
@@ -78,6 +92,7 @@ class FakeHandle implements ActionHandle {
   }
   async cdp<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
     this.calls.push({ method, params })
+    if (method === 'Input.dispatchKeyEvent') this.trail.push(`key:${String(params?.type)}`)
     const response = this.responses[method]
     const value = typeof response === 'function' ? (response as (p?: Record<string, unknown>) => unknown)(params) : response
     if (value instanceof Error) throw value
@@ -95,7 +110,7 @@ class FakeHandle implements ActionHandle {
 }
 
 function fakeEnv(): ActionEnv & { clock: number } {
-  const env = {
+  const env: ActionEnv & { clock: number } = {
     clock: 0,
     async sleep(ms: number) {
       env.clock += ms
@@ -286,7 +301,7 @@ test('parseKey maps names, aliases, letters, digits and punctuation', () => {
   assert.equal(parseKey('ArrowDown').windowsVirtualKeyCode, 40)
   assert.equal(parseKey('left').code, 'ArrowLeft')
   assert.equal(parseKey('Backspace').windowsVirtualKeyCode, 8)
-  assert.equal(parseKey('F5').windowsVirtualKeyCode, 116)
+  assert.equal(parseKey('F2').windowsVirtualKeyCode, 113)
   assert.deepEqual(parseKey('a'), { key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 0, text: 'a' })
   assert.deepEqual(parseKey('7'), { key: '7', code: 'Digit7', windowsVirtualKeyCode: 55, modifiers: 0, text: '7' })
   assert.deepEqual(parseKey('/'), { key: '/', code: 'Slash', windowsVirtualKeyCode: 191, modifiers: 0, text: '/' })
@@ -294,7 +309,7 @@ test('parseKey maps names, aliases, letters, digits and punctuation', () => {
 })
 
 test('parseKey folds modifiers into the bit field and drops the typed text under a command key', () => {
-  assert.deepEqual(parseKey('Control+a'), { key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 })
+  assert.deepEqual(parseKey('Control+a', 'linux'), { key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 })
   assert.equal(parseKey('Meta+Shift+ArrowLeft').modifiers, 4 | 8)
   assert.equal(parseKey('Shift+Tab').modifiers, 8)
   assert.equal(parseKey('Alt+Control+Delete').modifiers, 1 | 2)
@@ -482,7 +497,131 @@ test('get_marks lists the marks, or says there are none; an unknown action is re
   const handle = new FakeHandle()
   assert.match((await runBrowserAction(handle, 'get_marks', {}, fakeEnv())).text, /has not marked anything/)
   handle.marks = [{ id: 3, selector: 'main > a', text: 'Docs', html: '<a>', rect: { x: 1.4, y: 2, width: 3, height: 4 }, url: 'https://example.test/' , createdAt: 0 }]
-  assert.match((await runBrowserAction(handle, 'get_marks', {}, fakeEnv())).text, /#3 main > a text="Docs" rect=1,2 3x4/)
+  assert.match((await runBrowserAction(handle, 'get_marks', {}, fakeEnv())).text, /#1 main > a text="Docs" rect=1,2 3x4/)
   const unknown = await runBrowserAction(handle, 'selfdestruct', {}, fakeEnv())
   assert.equal(unknown.ok, false)
+})
+
+test('parseKey: a capital letter or a shifted symbol carries Shift by itself', () => {
+  assert.deepEqual(parseKey('A', 'linux'), { key: 'A', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 8, text: 'A' })
+  assert.deepEqual(parseKey('Shift+a', 'linux'), { key: 'A', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 8, text: 'A' })
+  assert.equal(parseKey('Control+A', 'linux').modifiers, 2, 'a command key does not add Shift to a capital')
+  const digits: Record<string, [string, number]> = { '!': ['Digit1', 49], '@': ['Digit2', 50], '#': ['Digit3', 51], $: ['Digit4', 52], '%': ['Digit5', 53], '^': ['Digit6', 54], '&': ['Digit7', 55], '*': ['Digit8', 56], '(': ['Digit9', 57], ')': ['Digit0', 48] }
+  for (const [symbol, [code, vk]] of Object.entries(digits)) {
+    assert.deepEqual(parseKey(symbol, 'linux'), { key: symbol, code, windowsVirtualKeyCode: vk, modifiers: 8, text: symbol }, symbol)
+  }
+  const punctuation: Record<string, string> = { _: 'Minus', '+': 'Equal', '{': 'BracketLeft', '}': 'BracketRight', '|': 'Backslash', ':': 'Semicolon', '"': 'Quote', '<': 'Comma', '>': 'Period', '?': 'Slash', '~': 'Backquote' }
+  for (const [symbol, code] of Object.entries(punctuation)) {
+    const spec = parseKey(symbol, 'linux')
+    assert.equal(spec.code, code, symbol)
+    assert.equal(spec.key, symbol, symbol)
+    assert.equal(spec.modifiers, 8, symbol)
+    assert.equal(spec.text, symbol, symbol)
+  }
+})
+
+test('parseKey: on macOS Meta and Control with a/c/v/x/z send the editing command', () => {
+  const expected: Record<string, string> = { a: 'selectAll', c: 'copy', v: 'paste', x: 'cut', z: 'undo' }
+  for (const [letter, command] of Object.entries(expected)) {
+    assert.deepEqual(parseKey(`Meta+${letter}`, 'darwin').commands, [command])
+    assert.deepEqual(parseKey(`Control+${letter}`, 'darwin').commands, [command])
+    assert.equal(parseKey(`Meta+${letter}`, 'linux').commands, undefined)
+  }
+  assert.equal(parseKey('Meta+b', 'darwin').commands, undefined)
+  assert.equal(parseKey('Meta+Shift+a', 'darwin').commands, undefined)
+  assert.equal(parseKey('a', 'darwin').commands, undefined)
+  assert.equal(parseKey('Meta+a', 'darwin').text, undefined)
+})
+
+test('press sends the editing commands with the key event', async () => {
+  const handle = new FakeHandle()
+  await runBrowserAction(handle, 'press', { key: 'Meta+a' }, fakeEnv())
+  const down = handle.named('Input.dispatchKeyEvent')[0].params
+  assert.equal(down?.modifiers, 4)
+  assert.deepEqual(down?.commands, process.platform === 'darwin' ? ['selectAll'] : undefined)
+})
+
+test('a hidden panel takes the focus for the keys and gives it back; a visible one keeps it', async () => {
+  const hidden = new FakeHandle()
+  hidden.visible = false
+  await runBrowserAction(hidden, 'press', { key: 'Enter' }, fakeEnv())
+  assert.deepEqual(hidden.trail, ['guest-focus', 'key:keyDown', 'key:keyUp', 'host-focus'])
+
+  const shown = new FakeHandle()
+  await runBrowserAction(shown, 'press', { key: 'Enter' }, fakeEnv())
+  assert.deepEqual(shown.trail, ['guest-focus', 'key:keyDown', 'key:keyUp'])
+  assert.equal(shown.hostFocused, 0)
+})
+
+test('typing into a hidden panel keeps the focus on the guest until the last character, then returns it once', async () => {
+  const handle = new FakeHandle()
+  handle.visible = false
+  handle.responses['Runtime.evaluate'] = { result: { type: 'boolean', value: true } }
+  const result = await runBrowserAction(handle, 'type', { text: 'a\nb' }, fakeEnv())
+  assert.equal(result.ok, true)
+  assert.equal(handle.hostFocused, 1)
+  assert.equal(handle.trail.at(-1), 'host-focus')
+  assert.equal(handle.trail.indexOf('host-focus'), handle.trail.length - 1)
+})
+
+test('an eval that never settles answers with a timeout error and the next action still runs', async () => {
+  const handle = new FakeHandle()
+  handle.responses['Runtime.evaluate'] = () => new Promise(() => {})
+  const env = { ...fakeEnv(), evalTimeoutMs: 20 }
+  const stuck = await runBrowserAction(handle, 'eval', { expression: 'new Promise(() => {})' }, env)
+  assert.equal(stuck.ok, false)
+  assert.match(stuck.text, /eval did not finish within/)
+  assert.equal(handle.named('Runtime.evaluate')[0].params?.timeout, 20)
+  handle.responses['Runtime.evaluate'] = { result: { type: 'number', value: 2 } }
+  const next = await runBrowserAction(handle, 'eval', { expression: '1+1' }, env)
+  assert.deepEqual([next.ok, next.text.split('\n')[0]], [true, '2'])
+})
+
+test('any action with a CDP call that never answers fails at its limit instead of holding the queue', async () => {
+  const handle = new FakeHandle()
+  handle.responses['Accessibility.getFullAXTree'] = () => new Promise(() => {})
+  const stuck = await runBrowserAction(handle, 'snapshot', {}, { ...fakeEnv(), actionTimeoutMs: 20 })
+  assert.equal(stuck.ok, false)
+  assert.match(stuck.text, /browser_snapshot did not finish within/)
+})
+
+test('the default limits are 30 s, and a wait gets its own timeout plus 5 s', async () => {
+  const { ACTION_TIMEOUT_MS, WAIT_TIMEOUT_GRACE_MS } = await import('./browser-actions')
+  assert.equal(ACTION_TIMEOUT_MS, 30_000)
+  assert.equal(WAIT_TIMEOUT_GRACE_MS, 5_000)
+})
+
+test('the screenshot text gives the viewport in CSS px, the image ratio, and says click x/y are CSS px', async () => {
+  const handle = new FakeHandle()
+  handle.responses['Page.getLayoutMetrics'] = { cssLayoutViewport: { clientWidth: 50, clientHeight: 25 } }
+  const result = await runBrowserAction(handle, 'screenshot', {}, fakeEnv())
+  assert.match(result.text, /Screenshot 100x50 image px/)
+  assert.match(result.text, /Viewport 50x25 CSS px; image px per CSS px = 2/)
+  assert.match(result.text, /browser_click x and y are CSS px/)
+})
+
+test('marks are numbered by place for the agent: mark 3, clear, mark 1 reads #1', async () => {
+  const handle = new FakeHandle()
+  const one = (id: number) => ({ id, selector: `#b${id}`, text: '', html: '', rect: { x: 0, y: 0, width: 5, height: 5 }, url: handle.url, createdAt: 0 })
+  // Ids keep counting after a clear; the position does not.
+  handle.marks = [one(4)]
+  const listed = await runBrowserAction(handle, 'get_marks', {}, fakeEnv())
+  assert.match(listed.text, /^Elements the user marked in the browser panel:\n#1 #b4/)
+  handle.marks = [one(4), one(5)]
+  const shot = await runBrowserAction(handle, 'screenshot', { withMarks: true }, fakeEnv())
+  assert.match(shot.text, /#1 #b4/)
+  assert.match(shot.text, /#2 #b5/)
+  const drawn = String(handle.named('Runtime.evaluate')[0].params?.expression)
+  assert.match(drawn, /"id":1,"selector":"#b4"/)
+  assert.match(drawn, /"id":2,"selector":"#b5"/)
+})
+
+test('refs survive a #hash change and die with any other URL change', async () => {
+  const handle = new FakeHandle()
+  handle.responses['Accessibility.getFullAXTree'] = { nodes: PAGE }
+  await runBrowserAction(handle, 'snapshot', {}, fakeEnv())
+  handle.url = 'https://example.test/#section'
+  assert.ok(currentRefs(handle))
+  handle.url = 'https://example.test/other'
+  assert.equal(currentRefs(handle), null)
 })

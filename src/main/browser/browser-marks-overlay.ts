@@ -6,6 +6,7 @@
 import type { BrowserCaptureLayout, BrowserMarkDraft } from '../../shared/browser'
 import { MARKS_BINDING, MARKS_WORLD, PAGE_SCRIPT } from './browser-marks-script'
 import type { MarkStore } from './browser-mark-store'
+import { t } from '../../shared/i18n'
 
 type Send = (method: string, params?: Record<string, unknown>) => Promise<unknown>
 
@@ -109,7 +110,7 @@ export class BrowserMarksOverlay {
       url: mark.url,
       sent: mark.sent === true,
     }))
-    return JSON.stringify({ mode: this.store.markMode, badges })
+    return JSON.stringify({ mode: this.store.markMode, badges, notice: t('browser.marks.iframe_denied') })
   }
 
   private async evaluate(contextId: number, expression: string): Promise<unknown> {

@@ -16,6 +16,7 @@ import {
   type BrowserState,
   type BrowserViewport,
   type ConsoleEntry,
+  validMaxDimension,
 } from '../../shared/browser'
 import { imageSize } from './image-size'
 import { electronImageCodec, stitchStrips, type BitmapImage, type ImageCodec, type Strip } from './image-stitch'
@@ -37,6 +38,8 @@ export interface BrowserHandle {
   setViewport(v: BrowserViewport | null): Promise<void>
   screenshot(opts?: ScreenshotRequest): Promise<BrowserScreenshot>
   cdp<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
+  /** Whether the panel is on screen; a hidden one must not take the keyboard focus. */
+  isVisible(): boolean
   getMarks(): BrowserMark[]
   addMark(m: Omit<BrowserMark, 'id' | 'createdAt'>): BrowserMark
   removeMark(id: number): void
@@ -167,6 +170,7 @@ class BrowserSession implements BrowserHandle {
   private viewport: BrowserViewport | null = null
   /** The last pane size the panel reported while it had one; a hidden panel reports 0x0, which is not kept. */
   private paneSize = { width: 0, height: 0 }
+  private visible = true
   /** The device whose user agent the page currently carries. A fresh guest runs the desktop one. */
   private device: EmulatedDevice = 'desktop'
   private readonly markStore: MarkStore
@@ -245,10 +249,16 @@ class BrowserSession implements BrowserHandle {
     }
   }
 
+  /** False once the panel reported 0x0 (hidden in the pool); true again at the next real size. */
+  isVisible(): boolean {
+    return this.visible
+  }
+
   setPaneSize(width: number, height: number): void {
     const next = { width: Math.max(0, Math.round(width)), height: Math.max(0, Math.round(height)) }
+    this.visible = next.width > 0 && next.height > 0
     // A panel that is hidden measures 0x0. The last size it had stays, so the agent's screenshot keeps a real size.
-    if (next.width === 0 || next.height === 0) return
+    if (!this.visible) return
     if (next.width === this.paneSize.width && next.height === this.paneSize.height) return
     this.paneSize = next
     emit(this.sessionKey, this.getState())
@@ -378,7 +388,7 @@ class BrowserSession implements BrowserHandle {
       const tiling = options.tiles
       const scale = tiling
         ? this.limitScale(pageScale, captureWidth * pageScale * ratio, tiling.maxWidth)
-        : this.limitScale(pageScale, Math.max(captureWidth, totalCss.height) * pageScale * ratio, options.maxDimension ?? MAX_FULL_PAGE_SIDE)
+        : this.limitScale(pageScale, Math.max(captureWidth, totalCss.height) * pageScale * ratio, validMaxDimension(options.maxDimension) ?? MAX_FULL_PAGE_SIDE)
       const maxRows = tiling ? tiling.maxTileHeight * tiling.maxTiles : Infinity
       const codec = await getImageCodec()
       const strips: Strip[] = []
@@ -451,8 +461,9 @@ class BrowserSession implements BrowserHandle {
 
   /** The clip scale that keeps the longest side (in output px) within `maxDimension`; never enlarges. */
   private limitScale(pageScale: number, longestSidePx: number, maxDimension: number | undefined): number {
-    if (maxDimension === undefined || maxDimension <= 0 || longestSidePx <= maxDimension) return pageScale
-    return pageScale * (maxDimension / longestSidePx)
+    const cap = validMaxDimension(maxDimension)
+    if (cap === undefined || longestSidePx <= cap) return pageScale
+    return pageScale * (cap / longestSidePx)
   }
 
   private async visualViewport(): Promise<VisualViewport> {
@@ -675,13 +686,14 @@ export function unregisterBrowser(sessionKey: string, only?: BrowserHandle): voi
 
 /**
  * A chat with no runtime yet gets its runtime id: the guest, its marks and its state move to the new key
- * as they are, without reloading the page. Does nothing when `from` has no browser or `to` already has one.
+ * as they are, without reloading the page. The marks move even when the panel is closed (marked, closed,
+ * then sent). Does nothing when `to` already has a browser; returns whether a guest moved.
  */
 export function rekeyBrowser(from: string, to: string): boolean {
-  if (from === to) return false
+  if (from === to || sessions.has(to)) return false
+  renameMarkStore(from, to)
   const current = sessions.get(from)
-  if (!current || sessions.has(to)) return false
-  if (!renameMarkStore(from, to)) return false
+  if (!current) return false
   sessions.delete(from)
   sessions.set(to, current)
   current.sessionKey = to
