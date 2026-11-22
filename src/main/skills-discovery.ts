@@ -1,6 +1,6 @@
-import { readdir, readFile, stat } from 'fs/promises'
+import { readFile } from 'fs/promises'
 import { extname, join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { RPC_SKILL_PATH_PREFIX, isRpcSkillPath, type InstalledSkill } from '../shared/ipc-contracts'
 import { skillDisplayName } from '../shared/pi-command'
 
@@ -66,11 +66,19 @@ export async function listSkills(
   engine: 'pi' | 'omp',
   homeDir: string = process.env.HOME ?? process.env.USERPROFILE ?? ''
 ): Promise<InstalledSkill[]> {
+  return listSkillsSync(cwd, engine, homeDir)
+}
+
+export function listSkillsSync(
+  cwd: string,
+  engine: 'pi' | 'omp',
+  homeDir: string = process.env.HOME ?? process.env.USERPROFILE ?? ''
+): InstalledSkill[] {
   const { dirs, recursive, rootMdFiles } = skillScanPlan(cwd, homeDir, engine)
 
   const skills: InstalledSkill[] = []
   for (const { dir, source } of dirs) {
-    await collectSkills(dir, skills, source, { recursive, rootMdFiles })
+    collectSkills(dir, skills, source, { recursive, rootMdFiles })
   }
 
   // Both engines resolve name collisions across roots first-wins, in the same
@@ -103,22 +111,22 @@ interface CollectOptions {
   rootMdFiles: boolean
 }
 
-async function collectSkills(
+function collectSkills(
   dir: string,
   skills: InstalledSkill[],
   source: 'global' | 'project',
   options: CollectOptions,
   isRoot = true
-): Promise<void> {
+): void {
   try {
     if (!existsSync(dir)) return
 
-    const items = await readdir(dir, { withFileTypes: true })
+    const items = readdirSync(dir, { withFileTypes: true })
 
     // Pi treats a directory holding SKILL.md as a skill root and never looks
     // inside it, so `references/*.md` and the like are not skills.
     if (options.recursive && items.some((item) => item.name === 'SKILL.md')) {
-      await pushSkillFile(join(dir, 'SKILL.md'), skills, source)
+      pushSkillFile(join(dir, 'SKILL.md'), skills, source)
       return
     }
 
@@ -128,7 +136,7 @@ async function collectSkills(
       let isDirectory = item.isDirectory()
       if (item.isSymbolicLink()) {
         try {
-          const stats = await stat(fullPath)
+          const stats = statSync(fullPath)
           isFile = stats.isFile()
           isDirectory = stats.isDirectory()
         } catch {
@@ -139,17 +147,17 @@ async function collectSkills(
       if (isFile && item.name.endsWith('.md') && item.name !== 'SKILL.md') {
         // Bare .md skills count only directly under the skills root
         if (!options.rootMdFiles || !isRoot) continue
-        await pushSkillFile(fullPath, skills, source)
+        pushSkillFile(fullPath, skills, source)
       } else if (isDirectory) {
         if (options.recursive) {
           if (item.name.startsWith('.') || item.name === 'node_modules') continue
-          await collectSkills(fullPath, skills, source, options, false)
+          collectSkills(fullPath, skills, source, options, false)
           continue
         }
         // Directory with SKILL.md
         const skillFile = join(fullPath, 'SKILL.md')
         if (existsSync(skillFile)) {
-          await pushSkillFile(skillFile, skills, source)
+          pushSkillFile(skillFile, skills, source)
         }
       }
     }
@@ -158,13 +166,13 @@ async function collectSkills(
   }
 }
 
-async function pushSkillFile(
+function pushSkillFile(
   filePath: string,
   skills: InstalledSkill[],
   source: 'global' | 'project'
-): Promise<void> {
+): void {
   try {
-    const content = await readFile(filePath, 'utf-8')
+    const content = readFileSync(filePath, 'utf-8')
     const parsed = parseSkillFrontmatter(content)
     if (parsed) {
       skills.push({

@@ -1,7 +1,7 @@
-import type { AgentEngineKind, PiStartOptions, AppSettings, PermissionMode } from '../../shared/ipc-contracts'
+import type { AgentEngineKind, PiStartOptions, AppSettings, PermissionMode, InstalledSkill } from '../../shared/ipc-contracts'
 import { getGuiDataPath } from '../app-data-paths'
 import { workspaceTrustStore } from '../workspace-trust'
-import { join, dirname } from 'path'
+import { join, dirname, basename } from 'path'
 import { existsSync } from 'fs'
 import { PERMISSION_RULES_FILE_NAME } from '../../../resources/permission-rules'
 import { NEXT_STEPS_EXTENSION_FILE, NEXT_STEPS_TOOL_NAME } from '../../../resources/next-steps'
@@ -12,6 +12,8 @@ import { DEFAULT_AGENT_ENGINE_LABEL, agentEngineLabel } from '../../shared/agent
 import { i18n } from '../../shared/i18n'
 import { typeSafeKeyEnv, typeSafeKeyStore } from '../typesafe-key-store'
 import { agentResourcePath } from '../agent-resources'
+import { listSkillsSync } from '../skills-discovery'
+import { appLog } from '../app-log'
 
 const READ_ONLY_TOOLS = 'read,grep,find,ls'
 const OMP_READ_ONLY_TOOLS = 'read,grep,glob'
@@ -96,6 +98,42 @@ export function applyModelDefaults(options: PiStartOptions, settings: AppSetting
   }
 }
 
+const stripSkillNameQuotes = (name: string): string => name.trim().replace(/^["']+|["']+$/g, '').trim()
+
+/**
+ * Pi args that restrict the agent to the skills of one group: `--no-skills`
+ * plus a `--skill <dir>` per member. Explicit `--skill` paths load even when
+ * `--no-skills` is set or the skill is excluded in Pi's own settings.json.
+ * Names are matched with surrounding quotes stripped, deduplicated, and a
+ * name no installed skill answers to is skipped.
+ */
+export function skillGroupArgs(
+  settings: Pick<AppSettings, 'skillGroups' | 'activeSkillGroupId'>,
+  installed: readonly InstalledSkill[]
+): { args: string[]; unresolved: string[] } {
+  const group = settings.activeSkillGroupId
+    ? settings.skillGroups.find((entry) => entry.id === settings.activeSkillGroupId)
+    : undefined
+  if (!group) return { args: [], unresolved: [] }
+
+  const byName = new Map(installed.map((skill) => [stripSkillNameQuotes(skill.name), skill.path]))
+  const args = ['--no-skills']
+  const unresolved: string[] = []
+  const seen = new Set<string>()
+  for (const raw of group.skills) {
+    const name = stripSkillNameQuotes(raw)
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    const path = byName.get(name)
+    if (!path) {
+      unresolved.push(name)
+      continue
+    }
+    args.push('--skill', basename(path) === 'SKILL.md' ? dirname(path) : path)
+  }
+  return { args, unresolved }
+}
+
 export function applyPermissionModeToStartOptions(
   options: PiStartOptions,
   settings: AppSettings
@@ -113,6 +151,13 @@ export function applyPermissionModeToStartOptions(
     args.push('-e', PERMISSIONS_EXTENSION_PATH)
   }
   if (suggestsNextSteps) args.push('-e', NEXT_STEPS_EXTENSION_PATH)
+  if (engine === 'pi' && settings.activeSkillGroupId) {
+    const group = skillGroupArgs(settings, listSkillsSync(options.cwd ?? process.env.HOME ?? '', 'pi'))
+    args.push(...group.args)
+    if (group.unresolved.length > 0) {
+      appLog.warn('skills', `Skill group skills not found: ${group.unresolved.join(', ')}`)
+    }
+  }
 
   return {
     ...options,

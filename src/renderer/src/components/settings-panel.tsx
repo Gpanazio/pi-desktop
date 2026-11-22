@@ -136,6 +136,7 @@ export function SettingsPanel(): React.JSX.Element {
   const [desktopNotifications, setDesktopNotifications] = useState(draft0.desktopNotifications ?? settings?.desktopNotifications ?? DEFAULT_SETTINGS.desktopNotifications)
   const [suggestNextSteps, setSuggestNextSteps] = useState(draft0.suggestNextSteps ?? settings?.suggestNextSteps ?? DEFAULT_SETTINGS.suggestNextSteps)
   const [resumeLastSession, setResumeLastSession] = useState(draft0.resumeLastSession ?? settings?.resumeLastSession ?? DEFAULT_SETTINGS.resumeLastSession)
+  const [activeSkillGroupId, setActiveSkillGroupId] = useState<string | null>(draft0.activeSkillGroupId !== undefined ? draft0.activeSkillGroupId : settings?.activeSkillGroupId ?? DEFAULT_SETTINGS.activeSkillGroupId)
   const [openToHomeOnLaunch, setOpenToHomeOnLaunch] = useState(draft0.openToHomeOnLaunch ?? settings?.openToHomeOnLaunch ?? DEFAULT_SETTINGS.openToHomeOnLaunch)
   const [runOnStartup, setRunOnStartup] = useState(draft0.runOnStartup ?? settings?.runOnStartup ?? DEFAULT_SETTINGS.runOnStartup)
   const [minimizeToTrayOnClose, setMinimizeToTrayOnClose] = useState(draft0.minimizeToTrayOnClose ?? settings?.minimizeToTrayOnClose ?? DEFAULT_SETTINGS.minimizeToTrayOnClose)
@@ -323,6 +324,7 @@ export function SettingsPanel(): React.JSX.Element {
     setDesktopNotifications(draft.desktopNotifications ?? settings.desktopNotifications)
     setSuggestNextSteps(draft.suggestNextSteps ?? settings.suggestNextSteps)
     setResumeLastSession(draft.resumeLastSession ?? settings.resumeLastSession)
+    setActiveSkillGroupId(draft.activeSkillGroupId !== undefined ? draft.activeSkillGroupId : settings.activeSkillGroupId)
     setOpenToHomeOnLaunch(draft.openToHomeOnLaunch ?? settings.openToHomeOnLaunch)
     setRunOnStartup(draft.runOnStartup ?? settings.runOnStartup)
     setMinimizeToTrayOnClose(draft.minimizeToTrayOnClose ?? settings.minimizeToTrayOnClose)
@@ -582,6 +584,7 @@ export function SettingsPanel(): React.JSX.Element {
       desktopNotifications,
       suggestNextSteps,
       resumeLastSession,
+      activeSkillGroupId,
       openToHomeOnLaunch,
       runOnStartup,
       minimizeToTrayOnClose,
@@ -656,6 +659,7 @@ export function SettingsPanel(): React.JSX.Element {
       desktopNotifications: DEFAULT_SETTINGS.desktopNotifications,
       suggestNextSteps: DEFAULT_SETTINGS.suggestNextSteps,
       resumeLastSession: DEFAULT_SETTINGS.resumeLastSession,
+      activeSkillGroupId: DEFAULT_SETTINGS.activeSkillGroupId,
       openToHomeOnLaunch: DEFAULT_SETTINGS.openToHomeOnLaunch,
       runOnStartup: DEFAULT_SETTINGS.runOnStartup,
       minimizeToTrayOnClose: DEFAULT_SETTINGS.minimizeToTrayOnClose,
@@ -681,6 +685,7 @@ export function SettingsPanel(): React.JSX.Element {
     setDesktopNotifications(defaults.desktopNotifications!)
     setSuggestNextSteps(defaults.suggestNextSteps!)
     setResumeLastSession(defaults.resumeLastSession!)
+    setActiveSkillGroupId(defaults.activeSkillGroupId!)
     setOpenToHomeOnLaunch(defaults.openToHomeOnLaunch!)
     setRunOnStartup(defaults.runOnStartup!)
     setMinimizeToTrayOnClose(defaults.minimizeToTrayOnClose!)
@@ -1111,6 +1116,22 @@ export function SettingsPanel(): React.JSX.Element {
             description={t('settings.resumeLastSession.description')}
           >
             <Toggle checked={resumeLastSession} onChange={(v) => { setResumeLastSession(v); setSettingsDraft({ resumeLastSession: v }) }} />
+          </SettingsRow>
+
+          <SettingsRow label={t('settings.activeSkillGroup.label')} description={t('settings.activeSkillGroup.description')}>
+            <SelectField
+              value={activeSkillGroupId ?? ''}
+              onChange={(next) => {
+                const id = next === '' ? null : next
+                setActiveSkillGroupId(id)
+                setSettingsDraft({ activeSkillGroupId: id })
+              }}
+            >
+              <option value="">{t('settings.activeSkillGroup.allOption')}</option>
+              {(settings?.skillGroups ?? []).map((group) => (
+                <option key={group.id} value={group.id}>{group.name}</option>
+              ))}
+            </SelectField>
           </SettingsRow>
 
           <SettingsRow

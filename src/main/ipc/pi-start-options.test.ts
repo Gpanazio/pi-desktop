@@ -3,7 +3,7 @@ import { before, test } from 'node:test'
 import { createRequire } from 'node:module'
 import { basename } from 'node:path'
 import { DEFAULT_SETTINGS } from '../../shared/default-settings'
-import type { AgentEngineKind, AppSettings } from '../../shared/ipc-contracts'
+import type { AgentEngineKind, AppSettings, InstalledSkill } from '../../shared/ipc-contracts'
 import { NEXT_STEPS_EXTENSION_FILE, NEXT_STEPS_TOOL_NAME } from '../../../resources/next-steps'
 import { buildPiArgs } from '../pi-rpc-manager'
 
@@ -91,4 +91,36 @@ test('plan mode lists the next-steps tool on both engines while the setting is o
 
 test('modes without a tool list get no --tools flag for next steps', () => {
   assert.deepEqual(listedTools(permissionArgs({ permissionMode: 'ask-edits', suggestNextSteps: true })), [])
+})
+
+const installedSkill = (name: string, path: string): InstalledSkill => ({
+  name,
+  description: `${name} does things`,
+  path,
+  source: 'global',
+  enabled: true,
+})
+
+test('an active skill group loads only its skills, normalising quotes and duplicates', () => {
+  const installed = [
+    installedSkill('alpha', '/s/alpha/SKILL.md'),
+    installedSkill('"opendesign"', '/s/opendesign/SKILL.md'),
+    installedSkill('note', '/s/note.md'),
+    installedSkill('other', '/s/other/SKILL.md'),
+  ]
+  const group = { id: 'g', name: 'PI', skills: ['alpha', "'\"opendesign\"'", 'opendesign', 'note', 'ghost'], collapsed: false }
+  const { args, unresolved } = startOptions.skillGroupArgs({ skillGroups: [group], activeSkillGroupId: 'g' }, installed)
+  assert.deepEqual(args, [
+    '--no-skills',
+    '--skill', '/s/alpha',
+    '--skill', '/s/opendesign',
+    '--skill', '/s/note.md',
+  ])
+  assert.deepEqual(unresolved, ['ghost'])
+})
+
+test('no active skill group, or an unknown one, leaves the skill args alone', () => {
+  const group = { id: 'g', name: 'PI', skills: ['alpha'], collapsed: false }
+  assert.deepEqual(startOptions.skillGroupArgs({ skillGroups: [group], activeSkillGroupId: null }, []).args, [])
+  assert.deepEqual(startOptions.skillGroupArgs({ skillGroups: [group], activeSkillGroupId: 'missing' }, []).args, [])
 })

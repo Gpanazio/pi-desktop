@@ -38,6 +38,9 @@ export function normalizeStoredSettings(stored: Record<string, unknown>, languag
   merged.language = normalizeLanguageSetting(merged.language, languages)
   merged.shortcuts = normalizeKeyboardShortcuts(merged.shortcuts)
   merged.skillGroups = normalizeSkillGroups(merged.skillGroups)
+  if (typeof merged.activeSkillGroupId !== 'string' || !merged.skillGroups.some((group) => group.id === merged.activeSkillGroupId)) {
+    merged.activeSkillGroupId = null
+  }
   if (typeof merged.voiceModel !== 'string' || !getVoiceModel(merged.voiceModel)) {
     merged.voiceModel = DEFAULT_SETTINGS.voiceModel
   }

@@ -1243,6 +1243,11 @@
       "save": "Save Settings",
       "saved": "Saved!"
     },
+    "activeSkillGroup": {
+      "allOption": "All skills",
+      "description": "Pi only. \"All skills\" loads everything; picking a skill group loads just that group's skills",
+      "label": "Load only skills from group"
+    },
     "agentInstallation": {
       "appliesToNewSessions": "This change applies to new sessions. Open sessions keep the engine they started with.",
       "autoDetectOption": "Auto-detect (Pi first, then OMP)",

@@ -85,3 +85,11 @@ test('skill groups default to none and are cleaned on load', () => {
   assert.deepEqual(settings.skillGroups, [{ id: 'a', name: 'Git', skills: ['commit'], collapsed: true }])
   assert.deepEqual(normalizeStoredSettings({ skillGroups: 'bad' }, LANGUAGES).skillGroups, [])
 })
+
+test('activeSkillGroupId survives only when it names an existing skill group', () => {
+  const groups = [{ id: 'a', name: 'Git', skills: ['commit'], collapsed: false }]
+  assert.equal(DEFAULT_SETTINGS.activeSkillGroupId, null)
+  assert.equal(normalizeStoredSettings({ skillGroups: groups, activeSkillGroupId: 'a' }, LANGUAGES).activeSkillGroupId, 'a')
+  assert.equal(normalizeStoredSettings({ skillGroups: groups, activeSkillGroupId: 'gone' }, LANGUAGES).activeSkillGroupId, null)
+  assert.equal(normalizeStoredSettings({ activeSkillGroupId: 7 }, LANGUAGES).activeSkillGroupId, null)
+})

@@ -1243,6 +1243,11 @@
       "save": "Ayarları kaydet",
       "saved": "Kaydedildi!"
     },
+    "activeSkillGroup": {
+      "allOption": "Tüm beceriler",
+      "description": "Yalnızca Pi. \"Tüm beceriler\" hepsini yükler; bir grup seçmek yalnızca o grubun becerilerini yükler",
+      "label": "Yalnızca gruptaki becerileri yükle"
+    },
     "agentInstallation": {
       "appliesToNewSessions": "Bu değişiklik yeni oturumlarda geçerli olur. Açık oturumlar başladıkları motorla devam eder.",
       "autoDetectOption": "Otomatik algıla (önce Pi, sonra OMP)",

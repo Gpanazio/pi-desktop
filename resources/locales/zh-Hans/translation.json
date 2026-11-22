@@ -1217,6 +1217,11 @@
       "save": "保存设置",
       "saved": "已保存！"
     },
+    "activeSkillGroup": {
+      "allOption": "所有技能",
+      "description": "仅限 Pi。“所有技能”加载全部技能；选择分组后只加载该分组的技能",
+      "label": "仅加载此分组中的技能"
+    },
     "agentInstallation": {
       "appliesToNewSessions": "此更改适用于新会话。已打开的会话继续使用启动时的引擎。",
       "autoDetectOption": "自动检测（先 Pi，后 OMP）",

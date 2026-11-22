@@ -1350,6 +1350,8 @@ export interface AppSettings {
   collapsedSessionGroups: string[]
   // User-made groups in the Skills panel. Display only: skill files never move.
   skillGroups: import('./skill-groups').SkillGroup[]
+  // Pi only: when set to a skill group's id, Pi loads just that group's skills.
+  activeSkillGroupId: string | null
   /** Sidebar width in pixels; clamped by `clampSidebarWidth` on read. */
   sidebarWidth: number
   // Show the Home/launcher screen on launch (Pi starts lazily on first action)
