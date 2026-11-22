@@ -41,6 +41,9 @@ export function normalizeStoredSettings(stored: Record<string, unknown>, languag
   if (typeof merged.activeSkillGroupId !== 'string' || !merged.skillGroups.some((group) => group.id === merged.activeSkillGroupId)) {
     merged.activeSkillGroupId = null
   }
+  merged.hiddenModels = Array.isArray(merged.hiddenModels)
+    ? merged.hiddenModels.filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '')
+    : DEFAULT_SETTINGS.hiddenModels
   if (typeof merged.voiceModel !== 'string' || !getVoiceModel(merged.voiceModel)) {
     merged.voiceModel = DEFAULT_SETTINGS.voiceModel
   }

@@ -49,6 +49,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   collapsedSessionGroups: [],
   skillGroups: [],
   activeSkillGroupId: null,
+  hiddenModels: [],
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
   openToHomeOnLaunch: true,
   runOnStartup: false,

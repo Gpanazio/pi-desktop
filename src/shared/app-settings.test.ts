@@ -93,3 +93,9 @@ test('activeSkillGroupId survives only when it names an existing skill group', (
   assert.equal(normalizeStoredSettings({ skillGroups: groups, activeSkillGroupId: 'gone' }, LANGUAGES).activeSkillGroupId, null)
   assert.equal(normalizeStoredSettings({ activeSkillGroupId: 7 }, LANGUAGES).activeSkillGroupId, null)
 })
+
+test('hiddenModels keeps only non-empty strings and defaults to an empty list', () => {
+  assert.deepEqual(DEFAULT_SETTINGS.hiddenModels, [])
+  assert.deepEqual(normalizeStoredSettings({ hiddenModels: ['*/gpt-5*', 7, ' '] }, LANGUAGES).hiddenModels, ['*/gpt-5*'])
+  assert.deepEqual(normalizeStoredSettings({ hiddenModels: 'bad' }, LANGUAGES).hiddenModels, [])
+})

@@ -8,6 +8,7 @@ import { composePrompt } from './utils/compose-prompt'
 import { firstQueued, withQueued, withoutQueued, withoutWorkspaceQueue, type SendQueues } from './send-queue'
 import { moveProjectTab, projectTabs, readProjectTabOrder, rememberProjectTabOrder } from './utils/tab-navigation'
 import { parseAgentMessage, type DisplayAttachment, type DisplayMessage } from './message-parsing'
+import { filterHiddenModels } from '../../shared/model-visibility'
 import { isStoppedAnswer } from '../../shared/stopped-answer'
 import { stripAnsi } from './utils/strip-ansi'
 import { createStaleGuard } from './utils/stale-guard'
@@ -2307,7 +2308,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     if (!isCurrent() || !response?.success || !Array.isArray(response.data?.models)) {
       throw new Error(t('models.selector.loadFailed'))
     }
-    return response.data.models
+    return filterHiddenModels(response.data.models, get().settings?.hiddenModels ?? [], get().sessionState?.model)
   },
 
   // ─── Thinking ─────────────────────────────────────────────────────────

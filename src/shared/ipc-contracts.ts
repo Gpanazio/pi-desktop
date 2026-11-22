@@ -1352,6 +1352,8 @@ export interface AppSettings {
   skillGroups: import('./skill-groups').SkillGroup[]
   // Pi only: when set to a skill group's id, Pi loads just that group's skills.
   activeSkillGroupId: string | null
+  // Model picker only: `provider/id` entries (`*` wildcard) that are left out of the list.
+  hiddenModels: string[]
   /** Sidebar width in pixels; clamped by `clampSidebarWidth` on read. */
   sidebarWidth: number
   // Show the Home/launcher screen on launch (Pi starts lazily on first action)
