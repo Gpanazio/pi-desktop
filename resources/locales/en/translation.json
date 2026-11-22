@@ -1367,6 +1367,7 @@
       "customModels": "Custom Models",
       "multiAgentCouncilPlanning": "Multi-Agent Council Planning",
       "typesafe": "TypeSafe Jev",
+      "visibleModels": "Visible models",
       "voiceDictation": "Voice dictation"
     },
     "shortcuts": {
@@ -1461,6 +1462,18 @@
     "uiFontSize": {
       "description": "Chat, panels, and sidebar — not the terminal or code editor",
       "label": "UI Font Size"
+    },
+    "visibleModels": {
+      "count": "{{visible}} of {{total}} visible",
+      "description": "Choose which models appear in the model picker. Unchecked models are hidden; the model a session is using always stays listed.",
+      "empty": "No models match",
+      "hiddenByPattern": "hidden by pattern {{pattern}}",
+      "hideProvider": "Hide all {{provider}} models",
+      "loadFailed": "Could not load the model list",
+      "patterns": "Hidden by pattern",
+      "removePattern": "Remove pattern {{pattern}}",
+      "search": "Search models",
+      "showProvider": "Show all {{provider}} models"
     },
     "voice": {
       "device": {

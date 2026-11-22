@@ -566,6 +566,8 @@ interface AppActions {
   saveDefaultModel: (provider: string, modelId: string) => Promise<void>
   cycleModel: () => Promise<void>
   listModels: () => Promise<ModelInfo[]>
+  // Unfiltered catalog (what Settings > Visible models lists)
+  listAllModels: () => Promise<ModelInfo[]>
 
   // Thinking
   setThinkingLevel: (level: string) => Promise<void>
@@ -2291,6 +2293,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   },
 
   listModels: async () => {
+    const models = await get().listAllModels()
+    return filterHiddenModels(models, get().settings?.hiddenModels ?? [], get().sessionState?.model)
+  },
+
+  listAllModels: async () => {
     const gen = sessionLoadGeneration
     const workspaceId = get().activeWorkspace?.id
     const isCurrent = (): boolean => gen === sessionLoadGeneration && workspaceId === get().activeWorkspace?.id
@@ -2308,7 +2315,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     if (!isCurrent() || !response?.success || !Array.isArray(response.data?.models)) {
       throw new Error(t('models.selector.loadFailed'))
     }
-    return filterHiddenModels(response.data.models, get().settings?.hiddenModels ?? [], get().sessionState?.model)
+    return response.data.models
   },
 
   // ─── Thinking ─────────────────────────────────────────────────────────

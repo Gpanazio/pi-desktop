@@ -22,3 +22,38 @@ export function filterHiddenModels<T extends ModelRef>(models: T[], hidden: stri
     return !patterns.some((pattern) => matchesModelPattern(pattern, model))
   })
 }
+
+export function modelKey(model: ModelRef): string {
+  return `${model.provider}/${model.id}`
+}
+
+export function isWildcardPattern(pattern: string): boolean {
+  return pattern.includes('*')
+}
+
+// The wildcard entry that hides this model, if any. Such a model cannot be
+// toggled from the checkbox list; the pattern chip has to be removed instead.
+export function hidingWildcard(hidden: string[], model: ModelRef): string | null {
+  return hidden.find((pattern) => isWildcardPattern(pattern) && matchesModelPattern(pattern, model)) ?? null
+}
+
+export function isModelHidden(hidden: string[], model: ModelRef): boolean {
+  return hidden.some((pattern) => pattern.trim() !== '' && matchesModelPattern(pattern, model))
+}
+
+// Show/hide one model with explicit `provider/id` entries. Wildcard entries and
+// entries for models absent from the catalog are never rewritten or dropped.
+export function toggleModel(hidden: string[], model: ModelRef, visible: boolean): string[] {
+  if (hidingWildcard(hidden, model)) return hidden
+  const key = modelKey(model)
+  const without = hidden.filter((entry) => entry.trim() !== key)
+  if (visible) return without.length === hidden.length ? hidden : without
+  return hidden.some((entry) => entry.trim() === key) ? hidden : [...hidden, key]
+}
+
+// Show/hide every model of a provider that is present in `models`.
+export function toggleProvider(hidden: string[], provider: string, models: ModelRef[], visible: boolean): string[] {
+  return models
+    .filter((model) => model.provider === provider)
+    .reduce((acc, model) => toggleModel(acc, model, visible), hidden)
+}

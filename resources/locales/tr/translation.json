@@ -1367,6 +1367,7 @@
       "customModels": "Özel modeller",
       "multiAgentCouncilPlanning": "Çok ajanlı konsey planlaması",
       "typesafe": "TypeSafe Jev",
+      "visibleModels": "Görünür modeller",
       "voiceDictation": "Sesli dikte"
     },
     "shortcuts": {
@@ -1461,6 +1462,18 @@
     "uiFontSize": {
       "description": "Sohbet, paneller ve kenar çubuğu; terminal ve kod düzenleyici hariç",
       "label": "Arayüz yazı tipi boyutu"
+    },
+    "visibleModels": {
+      "count": "{{visible}} / {{total}} görünür",
+      "description": "Model seçicide hangi modellerin görüneceğini seçin. İşaretsiz modeller gizlenir; bir oturumun kullandığı model her zaman listede kalır.",
+      "empty": "Eşleşen model yok",
+      "hiddenByPattern": "{{pattern}} deseniyle gizli",
+      "hideProvider": "Tüm {{provider}} modellerini gizle",
+      "loadFailed": "Model listesi yüklenemedi",
+      "patterns": "Desenle gizlenenler",
+      "removePattern": "{{pattern}} desenini kaldır",
+      "search": "Modellerde ara",
+      "showProvider": "Tüm {{provider}} modellerini göster"
     },
     "voice": {
       "device": {

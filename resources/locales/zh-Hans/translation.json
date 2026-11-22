@@ -1340,6 +1340,7 @@
       "customModels": "自定义模型",
       "multiAgentCouncilPlanning": "多智能体委员会规划",
       "typesafe": "TypeSafe Jev",
+      "visibleModels": "可见模型",
       "voiceDictation": "语音听写"
     },
     "shortcuts": {
@@ -1434,6 +1435,18 @@
     "uiFontSize": {
       "description": "聊天、面板和侧边栏 — 不包括终端和代码编辑器",
       "label": "界面字体大小"
+    },
+    "visibleModels": {
+      "count": "{{visible}} / {{total}} 可见",
+      "description": "选择模型选择器中显示哪些模型。未勾选的模型会被隐藏;会话正在使用的模型始终保留在列表中。",
+      "empty": "没有匹配的模型",
+      "hiddenByPattern": "已按模式 {{pattern}} 隐藏",
+      "hideProvider": "隐藏 {{provider}} 的所有模型",
+      "loadFailed": "无法加载模型列表",
+      "patterns": "按模式隐藏",
+      "removePattern": "移除模式 {{pattern}}",
+      "search": "搜索模型",
+      "showProvider": "显示 {{provider}} 的所有模型"
     },
     "voice": {
       "device": {
