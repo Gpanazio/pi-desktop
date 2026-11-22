@@ -4,6 +4,7 @@ import { applyLanguageSetting } from './i18n'
 import { applyUiFont } from './utils/ui-font'
 import { t } from '../../shared/i18n'
 import { buildPlanningPrompt } from './utils/planning-prompt'
+import { addGenerationTurn, type GenerationSpeed } from './utils/generation-speed'
 import { composePrompt } from './utils/compose-prompt'
 import { firstQueued, withQueued, withoutQueued, withoutWorkspaceQueue, type SendQueues } from './send-queue'
 import { moveProjectTab, projectTabs, readProjectTabOrder, rememberProjectTabOrder } from './utils/tab-navigation'
@@ -297,6 +298,7 @@ interface AppState {
   // Session
   sessionState: SessionState | null
   sessionStats: SessionStats | null
+  generationSpeed: GenerationSpeed | null
   sessionList: SessionListItem[]
   // Live Pi runtimes keyed by runtime id. Several can share one project cwd.
   sessionRuntimes: Record<string, SessionRuntimeInfo>
@@ -823,6 +825,8 @@ function enqueueAttachBackfill(get: () => AppState & AppActions): Promise<void> 
  * so its answer can tell whether a run followed it.
  */
 let agentRunStarts = 0
+// Wall clock of the first stream delta of the assistant message in flight.
+let firstDeltaAt: number | null = null
 
 /**
  * The prompt this window sent last: the chat it went to (its
@@ -985,6 +989,7 @@ function adoptMainSideActivation(
     editorDirty: false,
     sessionState: null,
     sessionStats: null,
+    generationSpeed: null,
     activeSessionRuntimeId: null,
     timelineEvents: [],
     piStatus: 'stopped',
@@ -1156,6 +1161,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   sessionState: null,
   sessionStats: null,
+  generationSpeed: null,
   sessionList: [],
   sessionRuntimes: {},
   activeSessionRuntimeId: null,
@@ -1698,6 +1704,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         currentView: 'chat',
         sessionState: null,
         sessionStats: null,
+        generationSpeed: null,
         composerFocusRequested: true,
         // A new session has no history to wait for. Show the empty chat
         // immediately; the runtime event hydrates its generated session path
@@ -1761,6 +1768,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         currentView: 'chat',
         sessionState: null,
         sessionStats: null,
+        generationSpeed: null,
         sessionLoading: true,
         activeSessionRuntimeId: runtime.runtimeId,
         piStatus: runtime.status === 'stopped' ? 'starting' : runtime.status,
@@ -1830,6 +1838,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           set({
             sessionState: null,
             sessionStats: null,
+            generationSpeed: null,
             sessionLoading: false,
             activeSessionRuntimeId: null,
             piStatus: 'stopped',
@@ -1894,6 +1903,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           sessionLoading: true,
           sessionState: null,
           sessionStats: null,
+          generationSpeed: null,
           activeSessionRuntimeId: null,
           // The dialog belongs to the runtime being left. Main retains its
           // origin and replays it when the user switches back.
@@ -2536,6 +2546,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         // matching pending echo means skip. Assistant-role message_start is
         // ignored: assistant content renders via message_update / message_end.
         const startedMessage = (event as PiMessageStartEvent).message
+        if ((startedMessage as { role?: unknown } | undefined)?.role === 'assistant') firstDeltaAt = null
         if (startedMessage && (startedMessage as { role?: unknown }).role === 'user') {
           const parsed = parseAgentMessage(startedMessage)
           if (parsed && parsed.content.trim() && !consumeLocalEcho(parsed.content)) {
@@ -2566,6 +2577,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       }
 
       case 'message_update':
+        firstDeltaAt ??= Date.now()
         handleMessageUpdate(event as PiMessageUpdateEvent, set, get)
         break
 
@@ -2574,6 +2586,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         // Tool results and user echoes do not finish the assistant stream.
         // In particular, other tools may still be executing in parallel.
         if (endedMessage?.role !== 'assistant') break
+        {
+          const usage = endedMessage.usage as { output?: unknown } | undefined
+          const next = addGenerationTurn(get().generationSpeed, usage?.output, firstDeltaAt, Date.now())
+          if (next !== get().generationSpeed) set({ generationSpeed: next })
+          firstDeltaAt = null
+        }
         handleTurnComplete(set, endedMessage, false)
         // turn_end re-delivers the same message, so errors surface only here.
         const turnError = turnErrorText(endedMessage)
@@ -3208,6 +3226,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         activeWorkspace: workspace,
         sessionState: null,
         sessionStats: null,
+        generationSpeed: null,
         extensionUiRequest: null,
         previewTarget: null,
         editorDirty: false,

@@ -1684,6 +1684,8 @@
     "contextUsage": "上下文：{{tokens}} / {{contextWindow}} token",
     "contextUsageUnknown": "下一次回复之前上下文用量未知",
     "followUpQueued_other": "{{count}} 条追问待发送",
+    "genSpeedTitle": "本会话平均生成速度",
+    "genSpeedTitleWithCost": "本会话平均生成速度 — 会话费用：${{cost}}",
     "gitBranch": "Git 分支：{{branch}}",
     "hideTerminal": "隐藏终端",
     "openWorkflowRuns": "打开工作流运行",
@@ -1694,6 +1696,7 @@
     "showTerminal": "显示终端",
     "steerQueued_other": "{{count}} 条引导已排队",
     "streaming": "流式输出中",
+    "tokensPerSecond": "{{value}} tk/s",
     "waitingOnPromptElsewhere": "{{agent}} 在另一个工作区有询问等待回应；切换过去作答",
     "workflowCount_other": "{{count}} 个工作流",
     "workflowsFallback": "工作流"

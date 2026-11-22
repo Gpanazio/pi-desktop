@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { formatContextPercent } from '../utils/format-context-percent'
+import { formatTokensPerSecond } from '../utils/generation-speed'
 import { useAppStore, countPromptsWaitingElsewhere, formatPromptsWaiting } from '../store'
 import { agentEngineLabel } from '../../../shared/agent-engine-label'
 import { clsx } from 'clsx'
@@ -7,7 +8,7 @@ import { ProjectBranchSelector } from './project-branch-selector'
 import {
   PanelLeft,
   Terminal,
-  DollarSign,
+  Gauge,
   Layers,
   Minimize2,
   Settings,
@@ -23,6 +24,7 @@ export function StatusBar(): React.JSX.Element {
   // and a user who switched to OMP should not be told Pi is running.
   const engineLabel = useAppStore((state) => agentEngineLabel(state.piEngine) ?? 'Pi')
   const sessionStats = useAppStore((state) => state.sessionStats)
+  const generationSpeed = useAppStore((state) => state.generationSpeed)
   const isStreaming = useAppStore((state) => state.isStreaming)
   const pendingSteering = useAppStore((state) => state.pendingSteering)
   const pendingFollowUp = useAppStore((state) => state.pendingFollowUp)
@@ -177,13 +179,22 @@ export function StatusBar(): React.JSX.Element {
           </button>
         )}
 
-        {/* Cost */}
-        {sessionStats?.cost !== undefined && sessionStats.cost > 0 && (
-          <div className="flex items-center gap-1 text-dim">
-            <DollarSign size={10} />
-            <span>${sessionStats.cost.toFixed(2)}</span>
-          </div>
-        )}
+        {/* Average generation speed of the session; the session cost lives in its tooltip */}
+        <div
+          className="flex items-center gap-1 text-dim"
+          title={
+            sessionStats?.cost !== undefined && sessionStats.cost > 0
+              ? t('statusBar.genSpeedTitleWithCost', { cost: sessionStats.cost.toFixed(2) })
+              : t('statusBar.genSpeedTitle')
+          }
+        >
+          <Gauge size={10} />
+          <span>
+            {formatTokensPerSecond(generationSpeed) === null
+              ? '—'
+              : t('statusBar.tokensPerSecond', { value: formatTokensPerSecond(generationSpeed) })}
+          </span>
+        </div>
 
         {!sidebarOpen && (
           <button
