@@ -1775,6 +1775,7 @@
     "compactContextTitle": "Стиснути контекст — узагальнити листування для звільнення місця",
     "compacting": "стиснення…",
     "contextUsage": "Контекст: {{tokens}} / {{contextWindow}} токенів",
+    "contextUsageUnknown": "Використання контексту невідоме до наступної відповіді",
     "followUpQueued_one": "Продовжень у черзі: {{count}}",
     "followUpQueued_few": "Продовжень у черзі: {{count}}",
     "followUpQueued_many": "Продовжень у черзі: {{count}}",

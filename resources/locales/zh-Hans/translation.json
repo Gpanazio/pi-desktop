@@ -1682,6 +1682,7 @@
     "compactContextTitle": "压缩上下文 — 总结对话以释放空间",
     "compacting": "压缩中…",
     "contextUsage": "上下文：{{tokens}} / {{contextWindow}} token",
+    "contextUsageUnknown": "下一次回复之前上下文用量未知",
     "followUpQueued_other": "{{count}} 条追问待发送",
     "gitBranch": "Git 分支：{{branch}}",
     "hideTerminal": "隐藏终端",

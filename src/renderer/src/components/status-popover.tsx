@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { formatContextPercent } from '../utils/format-context-percent'
 import { useTranslation } from 'react-i18next'
 import { findSessionPreview, getSessionTitle } from '../utils/session-title'
 import { processStatusLabel } from '../utils/process-status-label'
@@ -69,12 +70,10 @@ export function StatusPopover(): React.JSX.Element {
   const isCompacting = sessionState?.isCompacting ?? false
   const ref = useRef<HTMLDivElement>(null)
 
-  // Some providers (e.g. lmstudio) return a fractional context-usage percent
-  // like 1.077270; round + clamp so it fits the fixed-width label instead of
-  // overflowing the popover.
-  const contextPct = sessionStats?.contextUsage
-    ? Math.min(100, Math.max(0, Math.round(sessionStats.contextUsage.percent ?? 0)))
-    : 0
+  // Fractional percents (e.g. 1.077270) are formatted/clamped so they fit the
+  // fixed-width label; null stays unknown instead of becoming 0.
+  const contextPctLabel = formatContextPercent(sessionStats?.contextUsage?.percent)
+  const contextPct = Math.min(100, Math.max(0, sessionStats?.contextUsage?.percent ?? 0))
 
   // Load data when opened
   useEffect(() => {
@@ -250,8 +249,8 @@ export function StatusPopover(): React.JSX.Element {
                               style={{ width: `${contextPct}%` }}
                             />
                           </div>
-                          <span className="text-[11px] w-8 shrink-0 text-right tabular-nums">
-                            {contextPct}%
+                          <span className="text-[11px] w-10 shrink-0 text-right tabular-nums">
+                            {contextPctLabel ?? '—'}
                           </span>
                         </div>
                       }

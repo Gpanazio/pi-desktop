@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { formatContextPercent } from '../utils/format-context-percent'
 import { useAppStore, countPromptsWaitingElsewhere, formatPromptsWaiting } from '../store'
 import { agentEngineLabel } from '../../../shared/agent-engine-label'
 import { clsx } from 'clsx'
@@ -143,16 +144,18 @@ export function StatusBar(): React.JSX.Element {
         {sessionStats?.contextUsage && (
           <div
             className="flex items-center gap-1 text-dim"
-            title={t('statusBar.contextUsage', {
-              tokens: sessionStats.contextUsage.tokens?.toLocaleString(i18n.language) ?? '?',
-              contextWindow: sessionStats.contextUsage.contextWindow.toLocaleString(i18n.language),
-            })}
+            title={
+              formatContextPercent(sessionStats.contextUsage.percent) === null
+                ? t('statusBar.contextUsageUnknown')
+                : t('statusBar.contextUsage', {
+                    tokens: sessionStats.contextUsage.tokens?.toLocaleString(i18n.language) ?? '?',
+                    contextWindow: sessionStats.contextUsage.contextWindow.toLocaleString(i18n.language),
+                  })
+            }
           >
             <Layers size={10} />
             <span>
-              {Number.isFinite(sessionStats.contextUsage.percent)
-                ? `${Math.round(sessionStats.contextUsage.percent as number)}%`
-                : '0%'}
+              {formatContextPercent(sessionStats.contextUsage.percent) ?? '—'}
             </span>
           </div>
         )}

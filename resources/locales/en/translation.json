@@ -1713,6 +1713,7 @@
     "compactContextTitle": "Compact context — summarize the conversation to free up space",
     "compacting": "compacting…",
     "contextUsage": "Context: {{tokens}} / {{contextWindow}} tokens",
+    "contextUsageUnknown": "Context usage unknown until the next response",
     "followUpQueued_one": "{{count}} follow-up queued",
     "followUpQueued_other": "{{count}} follow-up queued",
     "gitBranch": "Git branch: {{branch}}",

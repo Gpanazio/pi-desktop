@@ -1775,6 +1775,7 @@
     "compactContextTitle": "Сжать контекст — обобщить переписку для освобождения места",
     "compacting": "сжатие…",
     "contextUsage": "Контекст: {{tokens}} / {{contextWindow}} токенов",
+    "contextUsageUnknown": "Использование контекста неизвестно до следующего ответа",
     "followUpQueued_one": "Продолжений в очереди: {{count}}",
     "followUpQueued_few": "Продолжений в очереди: {{count}}",
     "followUpQueued_many": "Продолжений в очереди: {{count}}",

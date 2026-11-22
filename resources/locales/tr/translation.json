@@ -1713,6 +1713,7 @@
     "compactContextTitle": "Bağlamı sıkıştır — yer açmak için konuşmayı özetle",
     "compacting": "sıkıştırılıyor…",
     "contextUsage": "Bağlam: {{tokens}} / {{contextWindow}} token",
+    "contextUsageUnknown": "Bağlam kullanımı bir sonraki yanıta kadar bilinmiyor",
     "followUpQueued_one": "{{count}} ek mesaj kuyrukta",
     "followUpQueued_other": "{{count}} ek mesaj kuyrukta",
     "gitBranch": "Git dalı: {{branch}}",
