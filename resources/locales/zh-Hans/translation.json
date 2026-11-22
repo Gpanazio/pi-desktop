@@ -171,7 +171,10 @@
       "terminal": "终端"
     },
     "toolCall": {
+      "backgroundButton": "转后台",
+      "backgroundTooltip": "将此命令转入后台;它会继续运行",
       "status": {
+        "background": "后台",
         "done": "已完成",
         "error": "错误",
         "running": "运行中"

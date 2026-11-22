@@ -130,4 +130,11 @@ export function registerPiHandlers(ctx: IpcContext): void {
   ipcMain.handle(IPC_CHANNELS.PI_ABORT_BASH, async () => {
     return getActivePi().sendCommand({ type: 'abort_bash' })
   })
+
+  // Sent straight to the RPC, never through the app's send queue: `/bg` is an
+  // extension command that works mid-turn and must not become a user message.
+  ipcMain.handle(IPC_CHANNELS.PI_BASH_BACKGROUND, async (_event, toolCallId: unknown) => {
+    if (!isString(toolCallId) || !/^\S{1,200}$/.test(toolCallId)) throw new Error('toolCallId is invalid')
+    return getActivePi().sendCommand({ type: 'prompt', message: `/bg ${toolCallId}` })
+  })
 }

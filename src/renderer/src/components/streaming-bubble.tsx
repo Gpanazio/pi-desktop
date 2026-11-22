@@ -7,7 +7,9 @@ import { mayBeNextStepsCall } from '../next-steps'
 import { toolCallIconFor } from './tool-call-icon'
 import { useAppStore } from '../store'
 import { DEFAULT_SETTINGS } from '../../../shared/default-settings'
-import { Brain, Bot, Loader2 } from 'lucide-react'
+import { Brain, Bot, Loader2, MoveRight } from 'lucide-react'
+import { useState } from 'react'
+import { backgroundSummary, canMoveToBackground, type BashBackground } from '../../../shared/bash-background'
 import { clsx } from 'clsx'
 
 interface StreamingBubbleProps {
@@ -23,13 +25,37 @@ interface StreamingBubbleProps {
       isError?: boolean
       startedAt?: number
       durationMs?: number
+      background?: BashBackground
     }
   >
+}
+
+function BackgroundButton({ toolCallId }: { toolCallId: string }): React.JSX.Element {
+  const { t } = useTranslation()
+  const [pending, setPending] = useState(false)
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      title={t('chat.toolCall.backgroundTooltip')}
+      onClick={() => {
+        setPending(true)
+        // Stays disabled until tool_execution_end unmounts the button; only a
+        // failed send brings it back.
+        window.piDesktop.commands.bashBackground(toolCallId).catch(() => setPending(false))
+      }}
+      className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs text-secondary transition-colors hover:border-accent-fg hover:text-accent-fg disabled:opacity-60"
+    >
+      {pending ? <Loader2 size={11} className="animate-spin" /> : <MoveRight size={11} />}
+      <span>{t('chat.toolCall.backgroundButton')}</span>
+    </button>
+  )
 }
 
 export function StreamingBubble({ content: rawContent, thinking, toolCalls }: StreamingBubbleProps): React.JSX.Element {
   const { t } = useTranslation()
   const provider = useAppStore((state) => state.sessionState?.model?.provider)
+  const engine = useAppStore((state) => state.piEngine)
   const { content, toolCalls: markerCalls } = useMemo(
     () => splitClaudeCliMarkers(rawContent, provider, true),
     [rawContent, provider]
@@ -102,15 +128,20 @@ export function StreamingBubble({ content: rawContent, thinking, toolCalls }: St
                       <Icon size={12} className="shrink-0" />
                     )}
                     <span className="min-w-0 truncate font-jetbrains">{toolLabel(tc.name, t)}</span>
+                    {tc.background && (
+                      <span className="min-w-0 truncate text-xs text-faint">{backgroundSummary(tc.background)}</span>
+                    )}
+                    {canMoveToBackground(tc, engine) && <BackgroundButton toolCallId={id} />}
                     <span
                       className={clsx(
-                        'ml-auto shrink-0 text-xs capitalize',
+                        'shrink-0 text-xs capitalize',
+                        !(canMoveToBackground(tc, engine) || tc.background) && 'ml-auto',
                         tc.isExecuting && 'text-accent-fg animate-pulse',
                         !tc.isExecuting && tc.isError && 'text-error',
                         !tc.isExecuting && !tc.isError && 'text-success'
                       )}
                     >
-                      {toolCallStatusLabel(tc.isExecuting ? 'running' : tc.isError ? 'error' : 'done', t)}
+                      {toolCallStatusLabel(tc.isExecuting ? 'running' : tc.isError ? 'error' : tc.background ? 'background' : 'done', t)}
                     </span>
                   </div>
                 )

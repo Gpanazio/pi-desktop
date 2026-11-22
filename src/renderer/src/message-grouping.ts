@@ -246,12 +246,13 @@ export function groupToolMessages(messages: DisplayMessage[], t: Translate = sha
 }
 
 /** A tool call's run state, as shown next to its badge (e.g. message-bubble.tsx, streaming-bubble.tsx). */
-export type ToolCallStatus = 'running' | 'error' | 'done'
+export type ToolCallStatus = 'running' | 'error' | 'done' | 'background'
 
 const TOOL_CALL_STATUS_KEYS = {
   running: 'chat.toolCall.status.running',
   error: 'chat.toolCall.status.error',
   done: 'chat.toolCall.status.done',
+  background: 'chat.toolCall.status.background',
 } as const satisfies Record<ToolCallStatus, string>
 
 /** Label for a tool call's run state. Accepts the caller's own `t` so it re-renders on a language change. */

@@ -177,7 +177,10 @@
       "terminal": "Terminal"
     },
     "toolCall": {
+      "backgroundButton": "Arka plan",
+      "backgroundTooltip": "Bu komutu arka plana al; çalışmaya devam eder",
       "status": {
+        "background": "arka planda",
         "done": "bitti",
         "error": "hata",
         "running": "çalışıyor"

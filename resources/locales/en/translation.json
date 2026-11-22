@@ -177,7 +177,10 @@
       "terminal": "Terminal"
     },
     "toolCall": {
+      "backgroundButton": "Background",
+      "backgroundTooltip": "Move this command to the background; it keeps running",
       "status": {
+        "background": "background",
         "done": "done",
         "error": "error",
         "running": "running"

@@ -16,6 +16,7 @@ import { createStaleGuard } from './utils/stale-guard'
 import { splitClaudeCliMarkers } from './claude-cli-markers'
 import { markUnansweredToolCallsRunning, settleRunningToolCall } from './reattached-tool-calls'
 import type { PiCommand } from '../../shared/pi-command'
+import { parseBashBackground, type BashBackground } from '../../shared/bash-background'
 import type { SkillGroup } from '../../shared/skill-groups'
 import { forkPointForUserMessage, normalizeForkMessages, type ForkPoint } from '../../shared/fork-point'
 import { buildLineageTree, type LineageNode } from '../../shared/session-lineage'
@@ -314,7 +315,7 @@ interface AppState {
   streamingThinking: string
   streamingToolCalls: Map<
     string,
-    { name: string; args: string; result?: string; isExecuting: boolean; isError?: boolean; startedAt?: number; durationMs?: number }
+    { name: string; args: string; result?: string; isExecuting: boolean; isError?: boolean; startedAt?: number; durationMs?: number; background?: BashBackground }
   >
   isStreaming: boolean
   /**
@@ -4047,6 +4048,7 @@ function handleTurnComplete(
           isError: tc.isError,
           isExecuting: false,
           durationMs: tc.durationMs,
+          background: tc.background,
         })),
         ...text.toolCalls,
       ]
@@ -4181,6 +4183,7 @@ function handleToolEnd(
         isError: event.isError,
         result: resultText || existing.result,
         durationMs: existing.startedAt ? Date.now() - existing.startedAt : existing.durationMs,
+        background: parseBashBackground(event.result.details) ?? undefined,
       })
     }
 

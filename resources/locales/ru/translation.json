@@ -189,7 +189,10 @@
       "terminal": "Терминал"
     },
     "toolCall": {
+      "backgroundButton": "В фон",
+      "backgroundTooltip": "Перевести эту команду в фон; она продолжит работать",
       "status": {
+        "background": "в фоне",
         "done": "готово",
         "error": "ошибка",
         "running": "в работе"

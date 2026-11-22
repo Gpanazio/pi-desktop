@@ -26,6 +26,7 @@ import { RelativeTime } from '../utils/relative-time'
 import { isImeComposing } from '../utils/ime-composing'
 import { clsx } from 'clsx'
 import { splitAttachedFiles } from '../../../shared/untrusted-data'
+import { backgroundSummary, parseBashBackgroundText } from '../../../shared/bash-background'
 import {
   Copy,
   Check,
@@ -638,14 +639,17 @@ function ToolCallBadge({
   const editFile = edits ? toolCallFile(toolCall.name, toolCall.arguments) : null
   const editLang = editFile ? getCodeEditorLanguageName(editFile) : 'plain text'
   const [expanded, setExpanded] = useState(() => Boolean(edits))
+  const background = toolCall.background ?? parseBashBackgroundText(toolCall.result)
 
   const status = toolCall.isExecuting
     ? 'running'
     : toolCall.isError === true
       ? 'error'
-      : toolCall.isError === false || toolCall.result !== undefined
-        ? 'done'
-        : null
+      : background
+        ? 'background'
+        : toolCall.isError === false || toolCall.result !== undefined
+          ? 'done'
+          : null
 
   return (
     <div className="relative min-w-0 overflow-hidden rounded-lg border border-border bg-surface/50">
@@ -667,13 +671,17 @@ function ToolCallBadge({
         {toolCall.durationMs !== undefined && !toolCall.isExecuting && (
           <span className="shrink-0 text-faint">{formatDuration(toolCall.durationMs)}</span>
         )}
+        {background && (
+          <span className="shrink-0 text-faint">{backgroundSummary(background)}</span>
+        )}
         {status && (
           <span
             className={clsx(
               'shrink-0 capitalize',
               status === 'running' && 'text-warning animate-pulse',
               status === 'error' && 'text-error',
-              status === 'done' && 'text-success'
+              status === 'done' && 'text-success',
+              status === 'background' && 'text-accent-fg'
             )}
           >
             {toolCallStatusLabel(status, t)}

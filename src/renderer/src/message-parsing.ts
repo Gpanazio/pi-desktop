@@ -1,6 +1,7 @@
 import { t } from '../../shared/i18n'
 import { isStoppedAnswer } from '../../shared/stopped-answer'
 import { splitClaudeCliMarkers } from './claude-cli-markers'
+import type { BashBackground } from '../../shared/bash-background'
 
 export interface DisplayAttachment {
   kind: 'image'
@@ -23,6 +24,7 @@ export interface DisplayMessage {
     isError?: boolean
     isExecuting?: boolean
     durationMs?: number
+    background?: BashBackground
   }>
   thinking?: string
   /** Keep reasoning that was visible during streaming open on its first render. */

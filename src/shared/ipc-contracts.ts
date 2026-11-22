@@ -25,6 +25,7 @@ export const IPC_CHANNELS = {
   PI_ABORT: 'pi:abort',
   PI_BASH: 'pi:bash',
   PI_ABORT_BASH: 'pi:abort-bash',
+  PI_BASH_BACKGROUND: 'pi:bash-background',
 
   // Session management
   SESSION_NEW: 'session:new',

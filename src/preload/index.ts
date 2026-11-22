@@ -114,6 +114,7 @@ interface PiDesktopAPI {
     abort(): Promise<unknown>
     bash(command: string): Promise<unknown>
     abortBash(): Promise<unknown>
+    bashBackground(toolCallId: string): Promise<unknown>
   }
 
   // Session management
@@ -459,6 +460,7 @@ const api: PiDesktopAPI = {
     abort: () => ipcRenderer.invoke(IPC_CHANNELS.PI_ABORT),
     bash: (command) => ipcRenderer.invoke(IPC_CHANNELS.PI_BASH, command),
     abortBash: () => ipcRenderer.invoke(IPC_CHANNELS.PI_ABORT_BASH),
+    bashBackground: (toolCallId) => ipcRenderer.invoke(IPC_CHANNELS.PI_BASH_BACKGROUND, toolCallId),
   },
 
   session: {
